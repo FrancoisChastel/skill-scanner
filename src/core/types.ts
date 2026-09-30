@@ -8,6 +8,7 @@ export type Confidence = (typeof CONFIDENCES)[number];
 
 export const CATEGORIES = [
   "prompt-injection",
+  "deception",
   "hidden-content",
   "exfiltration",
   "credential-access",

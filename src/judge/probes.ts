@@ -126,6 +126,8 @@ export const PROBE_FOR_CATEGORY: Readonly<Record<Category, ProbeId | undefined>>
   obfuscation: "obfuscation",
   "hidden-content": "obfuscation",
   "prompt-injection": "prompt_injection",
+  // Instructions to deceive the user manipulate what the agent does and says.
+  deception: "prompt_injection",
   "remote-execution": "remote_hidden_execution",
   privilege: "security_control_change",
   persistence: "security_control_change",

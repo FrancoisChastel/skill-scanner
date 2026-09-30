@@ -123,6 +123,7 @@ describe("existing findings", () => {
     // Assert
     expect(mapped).toEqual({
       "prompt-injection": "prompt_injection",
+      deception: "prompt_injection",
       "hidden-content": "obfuscation",
       exfiltration: "data_exfiltration",
       "credential-access": "sensitive_data_access",

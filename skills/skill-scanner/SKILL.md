@@ -6,7 +6,7 @@ license: MIT
 
 # skill-scanner
 
-skill-scanner reads a skill without running it and reports prompt injection, hidden or invisible instructions, commands that download and run code, credential reads that reach the network, persistence, and code that runs on install or on load. It works offline.
+skill-scanner reads a skill without running it and reports prompt injection, hidden or invisible instructions, commands that download and run code, credential reads that reach the network, persistence, code that runs on install or on load, and instructions to deceive the user (faked test results, hidden failures, a quietly swapped task). It works offline.
 
 ## Before installing a skill
 

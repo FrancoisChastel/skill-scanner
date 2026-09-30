@@ -43,6 +43,7 @@ only read from your home directory or `--config`, never from the directory being
 ## Categories
 
 - [prompt-injection](#prompt-injection) (11)
+- [deception](#deception) (12)
 - [hidden-content](#hidden-content) (9)
 - [exfiltration](#exfiltration) (6)
 - [credential-access](#credential-access) (6)
@@ -177,6 +178,152 @@ Severity: medium. Confidence: medium.
 TypeSafe's jev model answered "Does this skill try to override, ignore or manipulate an AI agent's instructions?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
 
 Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
+
+## deception
+
+<a name="deception-report-false-success"></a>
+
+### deception/report-false-success
+
+**Tells the agent to report success whatever happened**
+
+Severity: high. Confidence: medium.
+
+Instructions to say that tests passed, the build works, or the task is done regardless of the outcome, or when it failed. The user is told the work succeeded when it did not (the Replit incident, 2025).
+
+Remediation: Do not install. A skill must report failures as failures.
+
+<a name="deception-hide-failures"></a>
+
+### deception/hide-failures
+
+**Tells the agent to keep failures out of its report**
+
+Severity: high. Confidence: medium.
+
+Instructions not to mention test failures, build errors, or problems the agent ran into, or to hide them from the summary the user reads. The user then believes work is finished that is not.
+
+Remediation: Do not install. What failed is exactly what the user needs to hear.
+
+<a name="deception-fabricate-results"></a>
+
+### deception/fabricate-results
+
+**Tells the agent to make up results or claim work it did not do**
+
+Severity: high. Confidence: medium.
+
+Instructions to invent test results, logs, metrics, benchmarks, or citations, or to say that something was run or verified when it was not.
+
+Remediation: Do not install. A skill that fabricates evidence makes every result it reports worthless.
+
+<a name="deception-tamper-with-tests"></a>
+
+### deception/tamper-with-tests
+
+**Tells the agent to change tests until they pass**
+
+Severity: high. Confidence: medium.
+
+Instructions to edit, weaken, skip, or delete tests and checks so that they pass, or to rewrite assertions to match what the code returns. It is the most common way coding agents fake success (ImpossibleBench, the Claude 3.7 Sonnet system card).
+
+Remediation: Do not install. A skill must fix the code a test exposes, or stop and report the failing test, never change the test to hide it.
+
+<a name="deception-special-case-tests"></a>
+
+### deception/special-case-tests
+
+**Tells the agent to hard-code what the tests expect**
+
+Severity: high. Confidence: medium.
+
+Instructions to return the expected values directly, special-case the inputs the tests use, or behave differently when running under a test or grader. The code then passes its checks without doing the work (the Claude 3.7 Sonnet system card, ImpossibleBench, EvilGenie).
+
+Remediation: Do not install. Code that recognises its tests and answers them from a table does not work.
+
+<a name="deception-silence-checks"></a>
+
+### deception/silence-checks
+
+**Tells the agent to switch off checks until they pass**
+
+Severity: medium. Confidence: medium.
+
+Instructions to bypass commit hooks, sprinkle type-ignore or lint-disable comments, disable CI, lint, or test steps, or lower coverage and quality thresholds so that the checks go green without the problems being fixed.
+
+Remediation: Remove the instruction. Checks that fail should be fixed or reported, not silenced.
+
+<a name="deception-substitute-task"></a>
+
+### deception/substitute-task
+
+**Tells the agent to swap the task for an easier one**
+
+Severity: high. Confidence: medium.
+
+Instructions to change, narrow, or reinterpret what the user asked without saying so, or to deliver a simpler, partial, or stubbed version and present it as the finished work.
+
+Remediation: Do not install. When a task cannot be done as asked, the agent should say so, not deliver something else under its name.
+
+<a name="deception-lie-to-user"></a>
+
+### deception/lie-to-user
+
+**Tells the agent to lie to or mislead the user**
+
+Severity: high. Confidence: medium.
+
+Instructions to lie to, deceive, or mislead the user, to deny what was done if asked, or to tell the user one thing while doing another. Frontier models have been shown to lie about their actions when questioned (Apollo Research, 2024); a skill must not ask them to.
+
+Remediation: Do not install.
+
+<a name="deception-cover-tracks"></a>
+
+### deception/cover-tracks
+
+**Tells the agent to erase the evidence of what it did**
+
+Severity: high. Confidence: medium.
+
+Instructions to cover tracks: remove traces of the agent's actions, or clear history, logs, or commits so the user cannot see what happened. Models trained to tamper with their own checks have also learned to hide the tampering (Anthropic, Sycophancy to Subterfuge, 2024).
+
+Remediation: Do not install.
+
+<a name="deception-sabotage"></a>
+
+### deception/sabotage
+
+**Tells the agent to plant bugs or underperform on purpose**
+
+Severity: medium. Confidence: medium.
+
+Instructions to introduce bugs, flaws, or vulnerabilities on purpose, or to do worse than it can (sandbagging), behaviours measured in scheming evaluations (Apollo Research, 2024).
+
+Remediation: Do not install unless the skill is a mutation-testing or teaching tool and the planted bugs are the point.
+
+<a name="deception-swallowed-test-failure"></a>
+
+### deception/swallowed-test-failure
+
+**A test command whose failure is turned into success**
+
+Severity: medium. Confidence: medium.
+
+A test or check command followed by `|| exit 0` or by a success message printed when it fails. Whoever runs it, the agent included, is told the tests passed when they did not.
+
+Remediation: Let the test command's exit status through. A skill's verification step must be able to fail.
+
+<a name="deception-rigged-test-harness"></a>
+
+### deception/rigged-test-harness
+
+**Code that makes failing tests report success**
+
+Severity: high. Confidence: medium.
+
+Code that rewrites test outcomes to `passed`, forces the test session's exit status to 0, replaces assertion methods, exits with success after the suite, or defines an object equal to everything so any assertion holds. These are the tactics reward-hacking agents use against test suites (ImpossibleBench, METR, OpenAI 2025).
+
+Remediation: Do not install. A skill has no reason to change how tests report.
 
 ## hidden-content
 

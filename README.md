@@ -61,11 +61,12 @@ The exit code is 0 below the failure threshold, 1 at or above it (`--fail-on blo
 
 ## What it looks for
 
-109 rules in 15 categories. The full list, with severities and reasons, is in [docs/rules.md](./docs/rules.md) (`skill-scanner rules` prints it).
+121 rules in 16 categories. The full list, with severities and reasons, is in [docs/rules.md](./docs/rules.md) (`skill-scanner rules` prints it).
 
 | Category | Examples |
 |---|---|
 | Agent manipulation | instructions to ignore rules or hide actions from you, fake system messages, trigger-stuffed descriptions, instructions inside HTML comments |
+| Deceiving you | telling the agent to report success whatever happened, keep failures out of its summary, make up results, change or skip tests until they pass, hard-code what the tests expect, silence checks, quietly swap your task for an easier one, lie, or erase its tracks; scripts and test plugins that turn failing runs into passes |
 | Invisible and deceptive text | Unicode tag characters (decoded and shown), variation-selector smuggling, bidi overrides, zero-width text, look-alike letters, terminal escapes, whitespace padding |
 | Code execution | download-and-run, decode-and-run, reverse shells, fake password prompts, packed or minified code, base64/hex/char-code payloads (decoded and scanned again) |
 | Credentials and exfiltration | SSH keys, cloud credentials, keychains, browser stores, wallets, agent logins, environment dumps, and any of these reaching the network in the same skill |

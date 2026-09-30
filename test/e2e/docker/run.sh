@@ -127,6 +127,8 @@ run hook claude-code "$(cc_pre 'ls -la')"; [ -z "$OUT" ] && [ "$CODE" -eq 0 ] &&
 run hook claude-code "$(cc_pre "npx skills add $MAL -y")"; [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$OUT")" = "deny" ] && ok "Claude: malicious install denied" || ko "claude deny" "$OUT"
 run hook claude-code "$(cc_pre "npx skills add $GOOD -y")"
 jq -e '.hookSpecificOutput.updatedInput.command | test("guard --")' <<<"$OUT" >/dev/null && jq -e '.hookSpecificOutput.updatedInput.description == "install" and (.hookSpecificOutput | has("permissionDecision") | not)' <<<"$OUT" >/dev/null && ok "Claude: benign install rewritten through guard, other fields kept, no explicit allow" || ko "claude rewrite" "$OUT"
+run hook claude-code "$(cc_pre "npx skills add file://$HOME/repos/deceptive-repo -y")"
+[ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$OUT")" = "deny" ] && has "$OUT" "deception/" && ok "Claude: a skill that tells the agent to fake passing tests is denied" || ko "claude deception" "$OUT"
 run hook claude-code "$(cc_pre "export GIT_CONFIG_COU''NT=0; npx skills update")"; [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$OUT")" = "deny" ] && ok "Claude: tampering install denied" || ko "claude tamper" "$OUT"
 BAD_MD=$(cat "$HOME/fx/hidden/SKILL.md")
 W=$(jq -nc --arg p "$HOME/.claude/skills/newone/SKILL.md" --arg c "$BAD_MD" --arg cwd "$HOME" '{hook_event_name:"PreToolUse",session_id:"s",cwd:$cwd,tool_name:"Write",tool_input:{file_path:$p,content:$c},tool_use_id:"w"}')

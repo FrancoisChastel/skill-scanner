@@ -36,6 +36,12 @@ export function isCautionary(ctx: FileContext, offset: number): boolean {
 
 const LIST_ITEM_RE = /^\s*(?:[-*+]|\d+[.)])\s/;
 
+/** For a match in a list item, the heading or lead-in line the list hangs from; empty otherwise. */
+export function listLeadAt(ctx: FileContext, offset: number): string {
+  const { line } = positionAt(ctx.index, offset);
+  return LIST_ITEM_RE.test(lineText(ctx.index, line)) ? listLead(ctx, line) : "";
+}
+
 /** The heading or lead-in line a list hangs from ("## Must Never", "Avoid:"), found by walking up over its items. */
 function listLead(ctx: FileContext, line: number): string {
   for (let l = line - 1; l >= 1 && l >= line - 40; l -= 1) {

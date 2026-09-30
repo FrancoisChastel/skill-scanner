@@ -1,4 +1,5 @@
 import type { Rule, RuleMeta } from "../core/rule";
+import { deceptionRules } from "./deception";
 import { executionRules } from "./execution";
 import { credentialRules, networkRules } from "./exfiltration";
 import { hiddenContentRules, injectionRules } from "./injection";
@@ -13,6 +14,7 @@ import { unicodeRules } from "./unicode";
 /** Every built-in rule, in the order they appear in `skill-scanner rules`. */
 export const BUILTIN_RULES: readonly Rule[] = Object.freeze([
   ...injectionRules,
+  ...deceptionRules,
   ...hiddenContentRules,
   ...unicodeRules,
   ...executionRules,
