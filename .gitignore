@@ -9,3 +9,4 @@ coverage/
 .env.*
 !.env.example
 .claude/worktrees/
+test/e2e/docker/pkg/

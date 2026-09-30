@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- End-to-end suite in Docker (`bun run e2e`, `bun run e2e:registry`): installs the package next to the real Claude Code, Codex, OpenCode, Pi, and `skills` CLIs and the optional analyzers, and checks scan, add, guard, setup, the hooks, audit, trust, the adapters, the judge, and uninstall. A workflow runs it on demand before a release, on version tags against npm, and weekly against the latest harness versions.
+
 ## [0.1.0] - 2026-09-30
 
 First public release.

@@ -78,6 +78,8 @@
     "lint": "biome check . && node scripts/check-ascii.mjs",
     "docs:rules": "bun scripts/gen-rules-doc.ts",
     "check": "bun run typecheck && bun run lint && bun test && bun run build && node scripts/smoke.mjs",
+    "e2e": "bash scripts/e2e-docker.sh",
+    "e2e:registry": "bash scripts/e2e-docker.sh registry",
     "prepublishOnly": "bun run check"
   },
   "peerDependencies": {

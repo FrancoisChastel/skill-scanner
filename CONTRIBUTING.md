@@ -53,7 +53,13 @@ A scanner for invisible Unicode must not carry any. Write non-ASCII characters a
 
 ## Releasing
 
-Maintainers only. Bump `version` in `package.json` and `src/version.ts`, the action's default version, and the plugin manifests; add a section to `CHANGELOG.md`; run `bun run check`; `npm publish`; tag `vX.Y.Z`; create the GitHub release from the changelog section.
+Maintainers only.
+
+1. Bump `version` in `package.json` and `src/version.ts`, the action's default `version`, and `plugins/claude-code/.claude-plugin/plugin.json`. Move the `Unreleased` entries of `CHANGELOG.md` under the new version.
+2. `bun run check` (what CI runs).
+3. **Pre-release check:** `bun run e2e` packs this checkout and runs the Docker end-to-end suite against the tarball, with the real Claude Code, Codex, OpenCode, Pi, and `skills` CLIs and the optional analyzers (see [test/e2e/docker](./test/e2e/docker/README.md)). Or run the "End-to-end (Docker)" workflow on GitHub with mode `local`. Do not publish unless every check passes.
+4. `npm publish` (runs `bun run check` again first).
+5. `git tag vX.Y.Z && git push origin vX.Y.Z`, then `gh release create vX.Y.Z` with the changelog section. The tag push runs the end-to-end workflow against the package now on npm; `bun run e2e:registry` does the same locally.
 
 ## Conduct
 
