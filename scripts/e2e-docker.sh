@@ -27,6 +27,13 @@ case "$mode" in
     ;;
   registry)
     version="${2:-$(npm view "$package" version)}"
+    # Right after `npm publish` (a tag pushed at once), the registry can take a few minutes to serve it.
+    for attempt in $(seq 1 30); do
+      npm view "$package@$version" version >/dev/null 2>&1 && break
+      [ "$attempt" -eq 30 ] && { echo "e2e: $package@$version is not on npm" >&2; exit 1; }
+      echo "e2e: waiting for $package@$version to appear on npm"
+      sleep 10
+    done
     echo "e2e: testing $package@$version from npm"
     ;;
   *)
