@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-30
+
 ### Added
 
 - Updates are gated, not just installs. `guard` now also installs a git `reference-transaction` hook: before a checked-out branch (or its upstream) moves to a new commit, that commit is scanned, and a refused update is aborted. `git pull` and `pi update` are refused at their fetch, before the working tree changes; `reset`, `merge`, and `rebase` have the working tree put back, and a refused `git checkout` in an existing repository switches back. The hooks and plugins run `npx skills update`, `git pull` (and `reset`, `merge`, `rebase`, `checkout`) in an installed skill or plugin, `pi update`, `claude plugin update`, and the Claude Code and Codex marketplace updates under `guard`; Codex, which cannot rewrite a command, refuses them with the guarded command to run instead.

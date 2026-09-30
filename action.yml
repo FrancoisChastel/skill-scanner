@@ -14,7 +14,7 @@ inputs:
     default: block
   version:
     description: skill-scanner version to run from npm.
-    default: "0.1.0"
+    default: "0.2.0"
   sarif:
     description: Where to write the SARIF report. Upload it with github/codeql-action/upload-sarif.
     default: skill-scanner.sarif

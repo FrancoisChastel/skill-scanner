@@ -150,7 +150,7 @@ jobs:
       security-events: write   # to upload SARIF to code scanning
     steps:
       - uses: actions/checkout@v7
-      - uses: FrancoisChastel/skill-scanner@v0.1.0
+      - uses: FrancoisChastel/skill-scanner@v0.2.0
         with:
           path: skills
       - uses: github/codeql-action/upload-sarif@v4

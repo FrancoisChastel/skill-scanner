@@ -1,7 +1,7 @@
 {
   "name": "skill-scanner",
   "displayName": "skill-scanner",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scan Agent Skills for prompt injection, exfiltration, remote code, and persistence before Claude Code installs or runs them.",
   "author": {
     "name": "Francois Chastel"
