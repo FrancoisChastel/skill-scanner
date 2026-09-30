@@ -51,7 +51,7 @@ What static analysis misses, and why:
 
 ## Deception rules
 
-The `deception` category (added after 0.2.0) looks for skills that turn the agent against its user. Its patterns come from what published research and incidents show agents doing, not from any existing malicious-skill corpus: those corpora target malware, and none of their samples asks the agent to deceive.
+The `deception` category (added in 0.3.0) looks for skills that turn the agent against its user. Its patterns come from what published research and incidents show agents doing, not from any existing malicious-skill corpus: those corpora target malware, and none of their samples asks the agent to deceive.
 
 - Tampering with tests (editing or deleting assertions, skipping tests) and special-casing the test inputs: [ImpossibleBench](https://arxiv.org/abs/2510.20270) (2025), the Claude 3.7 Sonnet system card (2025), [EvilGenie](https://arxiv.org/abs/2511.21654) (2025).
 - Objects equal to everything, graders monkey-patched to report success: ImpossibleBench, [METR, Recent Frontier Models Are Reward Hacking](https://metr.org/blog/2025-06-05-recent-reward-hacking/) (2025), [OpenAI, Monitoring Reasoning Models for Misbehavior](https://arxiv.org/abs/2503.11926) (2025).

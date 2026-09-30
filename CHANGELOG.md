@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-30
+
 ### Added
 
 - A `deception` category of 12 rules for skills that turn the agent against its user: reporting success whatever happened, keeping failures out of the summary, making up results, changing or skipping tests until they pass, hard-coding what the tests expect, silencing checks, quietly swapping the task for an easier one, lying, covering tracks, and planting bugs; plus scripts and pytest or Jest code that turn failing runs into passes (`|| echo "passed"`, outcomes rewritten to `passed`, patched assertions, objects equal to everything). The tactics come from published reward-hacking and scheming research (ImpossibleBench, METR, OpenAI, the Claude 3.7 Sonnet system card, Apollo Research, Anthropic's Sycophancy to Subterfuge) and the 2025 Replit incident. Negated and descriptive wording ("never modify tests to make them pass") is recognised, so honest verification skills stay quiet: the rules change no verdict in the 3,611 benign skills used for calibration.
