@@ -142,16 +142,24 @@ Each runs without a shell, with a timeout, in a throwaway directory, and with it
 For repositories that publish skills:
 
 ```yaml
-- uses: actions/checkout@v4
-- uses: FrancoisChastel/skill-scanner@v0.1.0
-  with:
-    path: skills
-- uses: github/codeql-action/upload-sarif@v3
-  with:
-    sarif_file: skill-scanner.sarif
+jobs:
+  skills:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # to upload SARIF to code scanning
+    steps:
+      - uses: actions/checkout@v7
+      - uses: FrancoisChastel/skill-scanner@v0.1.0
+        with:
+          path: skills
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: skill-scanner.sarif
 ```
 
-The action writes SARIF for GitHub code scanning, a Markdown summary on the job page, and fails the step on a block (`fail-on: block|warn|never`).
+The action writes SARIF for GitHub code scanning, a Markdown summary on the job page, and fails the step on a block (`fail-on: block|warn|never`). `if: always()` uploads the findings even when the scan fails the job.
 
 ## Library
 
