@@ -1,6 +1,7 @@
 import { loadConfig } from "../../config";
 import type { ScanReport } from "../../core/types";
 import { formatReport, type ReportFormat } from "../../report/index";
+import { isolatedScanner } from "../../scan-worker";
 import {
   cloneUrlVariants,
   currentRuntime,
@@ -90,6 +91,8 @@ async function runAdd(argv: readonly string[], io: CliIO): Promise<number> {
       suppressions: config.ignore,
       ...(selected.length > 0 ? { onlySkills: selected } : {}),
       skillBundlesOnly: true,
+      // In a worker: Ctrl+C and the command's own signal handlers keep working during the scan.
+      scanner: isolatedScanner(),
     });
     // stdout carries our report, unless the skills CLI was asked for JSON on stdout.
     (skillsArgs.json ? io.stderr : io.stdout)(

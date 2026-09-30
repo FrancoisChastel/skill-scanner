@@ -11,12 +11,14 @@ import { basename, delimiter, join, relative, resolve, sep } from "node:path";
 import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin";
 import { type Config, DEFAULT_CONFIG, type HookPolicy, loadConfig } from "../config";
 import {
-  auditInstalled,
+  type auditInstalled,
+  auditInstalledDetailed,
   detectInstallIntents,
   evaluateCommand,
   evaluateSkillWrite,
   type FlaggedEntry,
   type GuardContext,
+  isolatedGuardDeps,
   loadFlagged,
   reconcileAfterChange,
   type SkillRoot,
@@ -64,12 +66,16 @@ export type DepsOverrides = Partial<Omit<GuardDeps, "timeouts">> & { readonly ti
 
 export function resolveDeps(overrides: DepsOverrides = {}): GuardDeps {
   const { timeouts, ...rest } = overrides;
+  // Scans run in worker threads: a scan that never yields must not freeze the harness it runs in.
+  const isolated = isolatedGuardDeps();
   return {
     detectInstallIntents,
-    evaluateCommand,
-    evaluateSkillWrite,
-    auditInstalled,
-    reconcileAfterChange,
+    evaluateCommand: (command, ctx) => evaluateCommand(command, ctx, isolated),
+    evaluateSkillWrite: (path, content, ctx) => evaluateSkillWrite(path, content, ctx, isolated),
+    auditInstalled: async (ctx, roots) => [
+      ...(await auditInstalledDetailed(ctx, { ...(roots ? { roots } : {}), scan: isolated.scanPath })).skills,
+    ],
+    reconcileAfterChange: (ctx, opts) => reconcileAfterChange(ctx, { scan: isolated.scanPath, ...opts }),
     loadFlagged,
     skillRoots,
     loadConfig: (env) => loadConfig(undefined, env),
@@ -406,10 +412,21 @@ function namesOf(f: FlaggedEntry): string[] {
 }
 
 function intentSource(i: InstallIntent): string | undefined {
-  if (i.kind === "skills-cli") return i.source;
-  if (i.kind === "git-clone") return i.url;
-  if (i.kind === "write-to-skill-dir") return i.dest;
-  return "source" in i ? i.source : i.target;
+  switch (i.kind) {
+    case "skills-cli":
+    case "codex-skill-installer":
+    case "pi-install":
+    case "pi-update":
+      return i.source;
+    case "git-clone":
+      return i.url;
+    case "write-to-skill-dir":
+      return i.dest;
+    case "git-update":
+      return i.dir;
+    default:
+      return i.target;
+  }
 }
 
 function sourceOf(intents: readonly InstallIntent[]): string | undefined {

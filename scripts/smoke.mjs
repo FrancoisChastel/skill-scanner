@@ -79,6 +79,21 @@ try {
 
   const help = run(runtime, ["help"]);
   check("runtime bundle runs help", help.code === 0, `exit ${help.code}\n${help.stderr}`);
+
+  // Hooks scan in a worker thread started from the bundle itself; both entries must be able to.
+  for (const [name, entry] of [
+    ["runtime bundle", runtime],
+    ["npm entry", cli],
+  ]) {
+    const refused = run(entry, ["hook", "git-post-checkout", "--dir", malicious]);
+    check(
+      `${name}: hook scan in a worker refuses a malicious tree`,
+      refused.code === 1 && /checkout refused/.test(refused.stderr),
+      `exit ${refused.code}\n${refused.stderr}`,
+    );
+    const passed = run(entry, ["hook", "git-post-checkout", "--dir", benign]);
+    check(`${name}: hook scan in a worker passes a benign tree`, passed.code === 0, `exit ${passed.code}\n${passed.stderr}`);
+  }
 } catch (e) {
   check("smoke test ran", false, e instanceof Error ? (e.stack ?? e.message) : String(e));
 } finally {

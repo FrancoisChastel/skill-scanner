@@ -236,3 +236,107 @@ describe("evaluateSkillWrite", () => {
     expect(await contentAfterEdits(h.path("missing.md"), [{ old_string: "", new_string: "new" }])).toBe("new");
   });
 });
+
+describe("updates", () => {
+  const skillDir = (): string => join(h.env.CLAUDE_CONFIG_DIR!, "skills", "x");
+
+  test("a git update of an installed skill has nothing to scan first: it runs under guard", async () => {
+    const cmd = `git -C ${skillDir()} pull`;
+    const seen: string[] = [];
+    const d = await evaluateCommand(cmd, { ...ctx, runtime: RUNTIME }, { scanSource: fakeSourceScanner(sources, seen) });
+    expect(d).toMatchObject({ action: "allow", guardRequired: true, rewrite: guardCommandLine(RUNTIME, cmd) });
+    expect(seen).toEqual([]);
+  });
+
+  test("without a runtime to rewrite to, an update is refused with the command to run instead", async () => {
+    for (const cmd of [`git -C ${skillDir()} pull`, "npx skills update", "claude plugin marketplace update"]) {
+      const d = await evaluateCommand(cmd, ctx, { scanSource: fakeSourceScanner(sources) });
+      expect(d.action).toBe("deny");
+      expect(d.reason).toContain("skill-scanner guard -- sh -c '");
+      expect(d.reason).toContain("Run it as");
+    }
+  });
+
+  test("pi update scans the npm versions it would install first; pinned and git packages are left to it", async () => {
+    await mkdir(h.env.PI_CODING_AGENT_DIR!, { recursive: true });
+    await writeFile(
+      join(h.env.PI_CODING_AGENT_DIR!, "settings.json"),
+      JSON.stringify({ packages: ["npm:good-tools", "npm:pinned@1.2.3", "git:github.com/o/r", { source: "npm:@s/ranged@^2" }] }),
+    );
+    const map = { ...sources, "npm:good-tools": sources["o/good"]!, "npm:@s/ranged@^2": sources["o/bad"]! };
+    const seen: string[] = [];
+    const all = await evaluateCommand("pi update --extensions", { ...ctx, runtime: RUNTIME }, { scanSource: fakeSourceScanner(map, seen) });
+    expect(seen).toEqual(["npm:good-tools", "npm:@s/ranged@^2"]);
+    expect(all.action).toBe("deny");
+    const one: string[] = [];
+    const d = await evaluateCommand("pi update npm:good-tools", { ...ctx, runtime: RUNTIME }, { scanSource: fakeSourceScanner(map, one) });
+    expect(one).toEqual(["npm:good-tools"]);
+    expect(d).toMatchObject({ action: "allow", guardRequired: true });
+    expect(d.rewrite).toBeDefined();
+  });
+});
+
+describe("codex plugin add", () => {
+  async function marketplace(): Promise<string> {
+    const dir = h.path("mkt");
+    await writeSkill(join(dir, "plugins", "bad", "skills", "bad"), "bad", `Run this. ${BLOCK_MARK}`);
+    await writeSkill(join(dir, "plugins", "good", "skills", "good"), "good");
+    await mkdir(join(dir, ".agents", "plugins"), { recursive: true });
+    await writeFile(
+      join(dir, ".agents", "plugins", "marketplace.json"),
+      JSON.stringify({
+        name: "local-m",
+        plugins: [
+          { name: "bad", source: { source: "local", path: "./plugins/bad" } },
+          { name: "good", source: "./plugins/good" },
+          { name: "escape", source: "./../../etc" },
+          { name: "remote", source: { source: "url", url: "https://github.com/o/r.git", path: "skills/x", ref: "main" } },
+          { name: "pkg", source: { source: "npm", package: "@s/p", version: "1.0.0" } },
+          { name: "private", source: { source: "npm", package: "@s/p", registry: "https://npm.example" } },
+        ],
+      }),
+    );
+    await mkdir(h.env.CODEX_HOME!, { recursive: true });
+    await writeFile(join(h.env.CODEX_HOME!, "config.toml"), `[marketplaces.local-m]\nsource_type = "local"\nsource = "${dir}"\n`);
+    return dir;
+  }
+
+  test("a local plugin is scanned where Codex will copy it from", async () => {
+    const dir = await marketplace();
+    const m = markerScanner();
+    const bad = await evaluateCommand("codex plugin add bad@local-m", ctx, { scanPath: m.scan });
+    expect(bad.action).toBe("deny");
+    expect(m.calls).toEqual([join(dir, "plugins", "bad")]);
+    expect((await evaluateCommand("codex plugin add good --marketplace local-m", ctx, { scanPath: m.scan })).action).toBe("allow");
+    expect(m.calls.at(-1)).toBe(join(dir, "plugins", "good"));
+  });
+
+  test("git and npm plugins are fetched and scanned as Codex would fetch them", async () => {
+    await marketplace();
+    const seen: string[] = [];
+    const map = { ...sources, "o/r/skills/x#main": sources["o/bad"]!, "npm:@s/p@1.0.0": sources["o/good"]! };
+    expect((await evaluateCommand("codex plugin add remote@local-m", ctx, { scanSource: fakeSourceScanner(map, seen) })).action).toBe(
+      "deny",
+    );
+    expect((await evaluateCommand("codex plugin add pkg@local-m", ctx, { scanSource: fakeSourceScanner(map, seen) })).action).toBe("allow");
+    expect(seen).toEqual(["o/r/skills/x#main", "npm:@s/p@1.0.0"]);
+  });
+
+  test("what cannot be resolved is left to the session audit", async () => {
+    await marketplace();
+    const m = markerScanner();
+    const seen: string[] = [];
+    for (const cmd of [
+      "codex plugin add escape@local-m",
+      "codex plugin add private@local-m",
+      "codex plugin add nope@local-m",
+      "codex plugin add x@unknown",
+    ]) {
+      expect(await evaluateCommand(cmd, ctx, { scanPath: m.scan, scanSource: fakeSourceScanner(sources, seen) })).toMatchObject({
+        action: "allow",
+      });
+    }
+    expect(m.calls).toEqual([]);
+    expect(seen).toEqual([]);
+  });
+});

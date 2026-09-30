@@ -151,6 +151,46 @@ run hook codex "$(jq -nc --arg cwd "$HOME" '{session_id:"s",cwd:$cwd,hook_event_
 [ "$(jq -r .decision <<<"$OUT")" = "block" ] && ok "Codex: \$dropped mention blocked" || ko "codex prompt" "$OUT"
 run hook claude-code 'not json at all'; [ "$CODE" -eq 0 ] && [ -z "$OUT" ] && ok "garbage input fails open silently" || ko "garbage" "$CODE $OUT"
 
+section "H2. updates are gated; codex plugin add is scanned first"
+UPD="$HOME/.claude/skills/upd"
+EVIL_URL="files.example-cdn.net"
+git clone -q "file://$HOME/repos/upd-repo" "$UPD"
+cp "$HOME/fx-evil-update.md" "$HOME/repos/upd-repo/SKILL.md" && git -C "$HOME/repos/upd-repo" commit -qam evil
+clean_upd() { ! grep -q "$EVIL_URL" "$UPD/SKILL.md" && [ -z "$(git -C "$UPD" status --porcelain)" ]; }
+run "$SS" guard git -C "$UPD" pull -q
+[ "$CODE" -ne 0 ] && has "$OUT" "update refused" && clean_upd && ok "guard: a malicious git pull of an installed skill is refused at the fetch" || ko "guard pull" "$CODE $(tail -4 <<<"$OUT")"
+run hook claude-code "$(cc_pre "git -C $UPD pull -q")"
+RW=$(jq -r '.hookSpecificOutput.updatedInput.command // empty' <<<"$OUT")
+[[ "$RW" == *" guard -- "* ]] && ok "Claude: git pull in an installed skill is rewritten through guard" || ko "claude update rewrite" "$OUT"
+run bash -c "$RW"; [ "$CODE" -ne 0 ] && clean_upd && ok "Claude: the rewritten pull is refused and the skill is unchanged" || ko "claude rewritten pull" "$CODE $(tail -3 <<<"$OUT")"
+run hook codex "$(cx_pre "git -C $UPD pull -q")"
+jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | test("guard -- "))' <<<"$OUT" >/dev/null && ok "Codex: git pull refused with the guarded command to run instead" || ko "codex update" "$OUT"
+git -C "$UPD" fetch -q
+for how in "reset --hard origin/main" "merge --ff-only origin/main"; do
+  run "$SS" guard git -C "$UPD" $how
+  [ "$CODE" -ne 0 ] && has "$OUT" "restored the working tree" && clean_upd && ok "guard: git $how to a fetched malicious commit is undone" || ko "guard $how" "$CODE $(tail -4 <<<"$OUT")"
+done
+printf -- '---\nname: upd\ndescription: Tidies Markdown tables. Use when a table is misaligned.\n---\nAlign the columns, then the header.\n' > "$HOME/repos/upd-repo/SKILL.md"
+git -C "$HOME/repos/upd-repo" commit -qam fix
+expect_code "guard: a benign update goes through" 0 "$SS" guard git -C "$UPD" pull -q --ff-only
+grep -q "then the header" "$UPD/SKILL.md" && ok "the benign update landed" || ko "benign update" "$(cat "$UPD/SKILL.md")"
+
+git config --global url."file://$HOME/repos/pirepo".insteadOf https://localhost/acme/pirepo
+PIDIR="$HOME/.pi/agent/git/localhost/acme/pirepo"
+run pi install git:localhost/acme/pirepo
+[ -f "$PIDIR/skills/hello/SKILL.md" ] && ok "pi: a git package installed" || ko "pi install git" "$(tail -3 <<<"$OUT")"
+cp "$HOME/fx-evil-update.md" "$HOME/repos/pirepo/skills/hello/SKILL.md" && git -C "$HOME/repos/pirepo" commit -qam evil
+run "$SS" guard pi update git:localhost/acme/pirepo
+has "$OUT" "update refused" && ! grep -q "$EVIL_URL" "$PIDIR/skills/hello/SKILL.md" && ok "pi update: a malicious update of a git package is refused before npm install" || ko "pi update" "$CODE $(tail -4 <<<"$OUT")"
+run hook claude-code "$(cc_pre 'pi update --extensions')"
+jq -e '.hookSpecificOutput.updatedInput.command | test("guard -- ")' <<<"$OUT" >/dev/null && ok "Claude: pi update --extensions runs under guard" || ko "claude pi update" "$OUT"
+
+run codex plugin marketplace add "$HOME/mkt"
+[ "$CODE" -eq 0 ] && ok "codex: local marketplace added" || ko "codex marketplace add" "$(tail -3 <<<"$OUT")"
+run hook codex "$(cx_pre 'codex plugin add evil@demo')"
+[ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$OUT")" = "deny" ] && ok "Codex: codex plugin add of a malicious plugin is denied before install" || ko "codex plugin add evil" "$OUT $(grep -A3 demo "$HOME/.codex/config.toml" 2>/dev/null)"
+run hook codex "$(cx_pre 'codex plugin add good --marketplace demo')"; [ -z "$OUT" ] && ok "Codex: a benign plugin add passes" || ko "codex plugin add good" "$OUT"
+
 section "I. audit, quarantine, restore, trust"
 run "$SS" audit --list-quarantine; has "$OUT" "dropped" && ok "quarantine list shows the skill" || ko "list quarantine" "$OUT"
 QID=$(ls "$HOME/.skill-scanner/quarantine" | grep dropped | head -1)
@@ -201,6 +241,13 @@ for a in gitleaks osv-scanner skillspector cisco semgrep; do
   NF=$(jq -r --arg a "$a" '[.bundles[].findings[] | select(.source|test($a;"i"))] | length' <<<"$OUT" 2>/dev/null)
   [ "$ST" = "ran" ] && ok "analyzer $a ran ($NF findings)" || ko "analyzer $a" "status=$ST $DET $(tail -2 <<<"$OUT")"
 done
+if command -v gitleaks >/dev/null; then
+  gitleaks dir "$HOME/fx/leaky" --no-banner --exit-code 0 --report-format json --report-path /tmp/gl.json --log-level error >/dev/null 2>&1
+  [ "$(jq length /tmp/gl.json 2>/dev/null)" = "0" ] && ok "gitleaks alone honors the skill's own .gitleaksignore (the fixture works)" || ko "gitleaks fixture" "$(head -c 300 /tmp/gl.json)"
+  run "$SS" scan "$HOME/fx/leaky" --with gitleaks --format json --fail-on never
+  NF=$(jq -r '[.bundles[].findings[] | select(.source == "external:gitleaks")] | length' <<<"$OUT" 2>/dev/null)
+  [ "${NF:-0}" -gt 0 ] && ok "gitleaks under skill-scanner still reports the token the skill tried to hide" || ko "gitleaks ignore file" "$(jq -c '.analyzers' <<<"$OUT" 2>/dev/null)"
+fi
 run "$SS" scan "$HOME/fx/secret" --with auto --format json --fail-on never; ok "--with auto ran: $(jq -r '[.analyzers[] | "\(.name)=\(.status)"] | join(", ")' <<<"$OUT" 2>/dev/null)"
 
 section "M. library and TypeScript types"

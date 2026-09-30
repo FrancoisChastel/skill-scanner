@@ -29,6 +29,9 @@ export interface ExternalAnalyzer {
   run(root: string, signal?: AbortSignal): Promise<Finding[]>;
 }
 
+/** Something that scans a directory the way `scanPath` does (in-process, or in a worker). */
+export type TargetScanner = (target: string, opts: ScanOptions) => Promise<ScanReport>;
+
 export interface ScanOptions {
   readonly rules?: readonly Rule[];
   readonly policy?: VerdictPolicy;

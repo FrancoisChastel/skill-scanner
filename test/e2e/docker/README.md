@@ -13,7 +13,7 @@ The run prints one `PASS`, `FAIL`, or `SKIP` line per check and exits 1 when any
 | File | Role |
 |---|---|
 | `Dockerfile` | Node 22, git, the harnesses at their latest versions, the analyzers, and the package from `pkg/*.tgz` or npm |
-| `run.sh` | The checks, grouped by area: install, CLI, local scans, remote sources, `add`, `guard`, `setup`, hooks, audit and trust, adapters, judge, analyzers, library types, uninstall |
+| `run.sh` | The checks, grouped by area: install, CLI, local scans, remote sources, `add`, `guard`, `setup`, hooks, gated updates (`git pull`, `pi update`) and `codex plugin add`, audit and trust, adapters, judge, analyzers, library types, uninstall |
 | `fixtures.py` | Creates the test skills and git repositories inside the container; payload strings are assembled at run time |
 | `mock-jev.mjs` | A local stand-in for TypeSafe's System One endpoint that answers and logs judge requests |
 | `adapters.mjs` | Loads the published OpenCode plugin and Pi extension, and the shims `setup` writes, with fake hosts |

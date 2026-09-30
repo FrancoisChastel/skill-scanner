@@ -89,7 +89,7 @@ describe("quoting", () => {
     const chained = postCheckoutScript(runtime, { kind: "dir", path: "/home/me/hooks" }, "/tmp/h ooks");
     expect(chained.startsWith("#!/bin/sh\n")).toBe(true);
     expect(chained).toContain(
-      `(cd '/tmp/h ooks' && exec '/opt/my node/bin/node' '/x/it'\\''s/cli.js' hook git-post-checkout --dir "$dir" "$@") || exit $?`,
+      `(cd '/tmp/h ooks' && exec '/opt/my node/bin/node' '/x/it'\\''s/cli.js' hook git-post-checkout --dir "$dir" --git-dir "$gitdir" "$@") || exit $?`,
     );
     expect(chained).toContain("prev='/home/me/hooks/post-checkout'");
     // The chained hook comes after the scan, so it never sees a refused checkout.
@@ -138,7 +138,8 @@ describe.skipIf(!hasGit)("guardEnv with git", () => {
       const last = log().at(-1)!;
       expect(last.argv.slice(0, 3)).toEqual(["hook", "git-post-checkout", "--dir"]);
       expect(last.argv[3]).toBe(realpathSync(join(root.path, "c1")));
-      expect(last.argv[5]).toBe(benignCommit);
+      expect(last.argv.slice(4, 6)).toEqual(["--git-dir", realpathSync(join(root.path, "c1", ".git"))]);
+      expect(last.argv[7]).toBe(benignCommit);
       // Never inside the untrusted checkout: runtimes read bunfig.toml and .env from their cwd.
       expect(last.cwd).toBe(realpathSync(g.hooksDir));
       const failed = clone(`file://${benign}`, "c2", { ...g.env, STUB_EXIT: "1" });

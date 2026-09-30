@@ -15,6 +15,15 @@ export function askReason(summary: string, source: string): string {
   return `${summary}\nskill-scanner found issues worth a look before installing ${source}. Approve only if you trust it; \`skill-scanner scan ${source}\` shows the details.`;
 }
 
+/** For an update that is only scanned under `guard`, when the harness cannot run it there itself. */
+export function guardRequiredReason(guarded: string): string {
+  return (
+    "skill-scanner: this command updates installed skills or plugins. An update can only be scanned as it arrives, " +
+    `which needs skill-scanner's guard around the command. Run it as:\n  ${guarded}\n` +
+    "Do not run the update any other way; if that fails, tell the user."
+  );
+}
+
 export function scanErrorReason(source: string, message: string, action: "allow" | "ask" | "deny"): string {
   const base = `skill-scanner could not scan ${source} before installing it: ${message}.`;
   if (action === "deny") return `${base} Do not retry or work around this. Tell the user; they can scan it with ${SCAN_HINT} ${source}\`.`;

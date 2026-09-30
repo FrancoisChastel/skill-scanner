@@ -30,6 +30,7 @@ export {
 } from "./decide";
 export { flaggedForUse, type HandlerDeps, type PatchFile, patchFiles } from "./hook-common";
 export { type DetectOptions, detectInstallIntents } from "./intents";
+export { isolatedGuardDeps } from "./isolation";
 export { harnessDirs, isInsideSkillRoot, locateSkillDir, type SkillLocation, skillRoots } from "./locations";
 export { flaggedContext, flaggedReason, flaggedSystemMessage } from "./messages";
 export { listQuarantine, QUARANTINE_RECORD, type QuarantineOptions, quarantineSkill, restoreQuarantined } from "./quarantine";

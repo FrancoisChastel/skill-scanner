@@ -11,28 +11,35 @@ const FLAGS = { help: { type: "boolean", short: "h", description: "Show this hel
 
 const DETAILS = `Every git checkout the command makes (clone, checkout, switch, worktree add) first runs
 skill-scanner's post-checkout hook: the new tree is scanned, and a blocking verdict fails the
-checkout, so the command that asked for it fails too. Nothing is installed: the hook lives in a
+checkout, so the command that asked for it fails too. Every update of an existing checkout (pull,
+fetch of the branch's upstream, reset, merge, rebase) is scanned before the branch moves, by a
+reference-transaction hook: a refused update is aborted, and when git had already written the
+working tree (reset, merge, rebase) it is put back. Nothing is installed: the hooks live in a
 temporary directory, named through GIT_CONFIG_* environment variables for this command only.
 
 Gates, for example:
   skill-scanner guard npx skills update         (also \`check\`, which updates)
   skill-scanner guard pi install git:github.com/owner/repo
+  skill-scanner guard pi update --extensions
+  skill-scanner guard git -C ~/.claude/skills/some-skill pull
   skill-scanner guard git clone https://github.com/owner/repo
   skill-scanner guard -- sh -c 'anything that checks out git repositories'
 
 It also turns off the skills CLI's snapshot download for well-known owners so those skills are
 cloned (and scanned) too. The skills CLI and pi then install nothing; a bare \`git clone\` fails
-but leaves the refused tree on disk.
+but leaves the refused tree on disk, and a refused \`git checkout\` in an existing repository
+switches back.
 
-Not gated: downloads that never touch git (npm tarballs, archives, well-known URLs), and updates
-that move an existing checkout without a checkout (git pull, git reset, pi update). An absolute
-core.hooksPath or the repository's own .git/hooks post-checkout still runs, before the scan.
-Refusals are repeated on stderr when the command exits. Exits with the command's exit code
-(128 + signal if a signal ended it).`;
+Not gated: downloads that never touch git (npm tarballs, archives, well-known URLs), and working
+tree writes that move no ref (git restore, git apply, git checkout <commit> -- <path>); the
+post-change audit catches those. An absolute core.hooksPath or the repository's own .git/hooks
+post-checkout and reference-transaction still run, after the scan. Refusals are repeated on
+stderr when the command exits. Exits with the command's exit code (128 + signal if a signal
+ended it).`;
 
 export const guardCommand: Command = {
   name: "guard",
-  summary: "Run a command so that every git checkout it makes is scanned first",
+  summary: "Run a command so that every git checkout and update it makes is scanned first",
   usage: "[--] <command> [args...]",
   flags: FLAGS,
   details: DETAILS,
@@ -74,8 +81,10 @@ async function runGuard(argv: readonly string[], io: CliIO): Promise<number> {
 export async function withRefusals(code: number, guard: GuardEnv, io: CliIO): Promise<number> {
   const text = await guard.refusals();
   if (!text.trim()) return code;
-  io.stderr(`\nskill-scanner guard refused these checkouts:\n${text}`);
-  io.stderr("A refused `git clone` leaves its files on disk; delete them unless you trust them.\n");
+  io.stderr(`\nskill-scanner guard refused these checkouts and updates:\n${text}`);
+  io.stderr(
+    "A refused `git clone` leaves its files on disk; delete them unless you trust them. Refused updates were undone as noted above.\n",
+  );
   return code === 0 ? EXIT.findings : code;
 }
 

@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { compareFindings, type VerdictPolicy, verdictFor, worstVerdict } from "../core/severity";
 import type { ScanReport } from "../core/types";
 import { scannerPaths } from "../paths";
-import { type ScanOptions, scanPath } from "../scan";
+import { scanPath, type TargetScanner } from "../scan";
 import { PLUGIN_MARKERS, statFingerprint } from "./fingerprint";
 import { errorMessage, forEachLimit, isInside } from "./fsutil";
 import { skillRoots } from "./locations";
@@ -30,7 +30,7 @@ import type { FlaggedEntry, GuardContext, InstalledSkill, SkillRoot } from "./ty
  * directories, apply the trust store, and refresh the flagged registry that use-time gates read.
  */
 
-export type TargetScanner = (dir: string, opts: ScanOptions) => Promise<ScanReport>;
+export type { TargetScanner };
 
 export interface AuditOptions {
   readonly roots?: readonly SkillRoot[];

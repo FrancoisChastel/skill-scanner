@@ -12,13 +12,13 @@ Decisions made by the hooks and plugins are appended to `~/.skill-scanner/decisi
 
 | Event | Matcher | Timeout | What it does |
 |---|---|---|---|
-| `PreToolUse` | `Bash\|PowerShell\|Write\|Edit\|MultiEdit\|NotebookEdit\|Skill` | 120 s | Recognises installs in shell commands (`npx skills add`, `git clone` into a skill folder, `claude plugin marketplace add`, Codex's skill-installer, `pi install`) and scans the source first. A block is denied with the findings; a warning asks you; a pass runs the install under `skill-scanner guard`. Writes into a skill folder are scanned with the new content. The `Skill` tool is denied for a flagged skill. |
+| `PreToolUse` | `Bash\|PowerShell\|Write\|Edit\|MultiEdit\|NotebookEdit\|Skill` | 120 s | Recognises installs in shell commands (`npx skills add`, `git clone` into a skill folder, `claude plugin marketplace add`, Codex's skill-installer, `pi install`) and scans the source first. A block is denied with the findings; a warning asks you; a pass runs the install under `skill-scanner guard`. Updates (`npx skills update`, `git pull` and friends in an installed skill, `pi update`, `claude plugin update`, `claude plugin marketplace update`) run under `guard`, which scans each incoming commit before it lands. Writes into a skill folder are scanned with the new content. The `Skill` tool is denied for a flagged skill. |
 | `PostToolUse` | `Bash\|PowerShell\|Write\|Edit\|MultiEdit` | 120 s | After a command or write that touched skill folders, rescans them; newly blocked skills are quarantined and the agent is told why. |
 | `SessionStart` | `startup\|resume\|clear\|compact` | 60 s | Audits installed skills and plugins (cached by content digest), tells the agent which flagged skills not to use, and tells you. |
 | `ConfigChange` | `skills` | 60 s | Claude Code reloads skills while a session runs; this rescans a skill whose files just changed and blocks the change if it is flagged. |
 | `UserPromptExpansion` | all | 15 s | Blocks `/name` for a flagged skill, so its load-time shell commands never run. |
 
-A pass returns nothing, deliberately: an explicit allow would skip Claude Code's own permission prompt. A rewrite to `skill-scanner guard ...` goes through your permission rules like any command. Each hook keeps a deadline shorter than its timeout, because a hook that times out lets the tool call through.
+A pass returns nothing, deliberately: an explicit allow would skip Claude Code's own permission prompt. A rewrite to `skill-scanner guard ...` goes through your permission rules like any command. Each hook keeps a deadline shorter than its timeout, because a hook that times out lets the tool call through; scans run in a worker thread that is terminated at the deadline, so the hook answers in time even if a scan never finishes.
 
 Interactive sessions run hooks only in folders you trusted. `disableAllHooks` in any settings file turns skill-scanner off with everything else; `doctor` warns when it is set.
 
@@ -47,7 +47,11 @@ Use one or the other, not both. See [plugins/claude-code/README.md](../plugins/c
 
 **Codex runs a new or edited hook only after you trust it.** Open Codex, run `/hooks`, and trust the skill-scanner entries. Until then nothing is checked; `setup` and `doctor` remind you.
 
-Codex hooks cannot ask, so a warning becomes a deny that tells the agent to ask you; set `"hooks": {"onWarn": "allow"}` to let warnings through instead. Codex's `requirements.toml` can restrict hooks to managed ones; `doctor` reports when hooks are disabled.
+Codex hooks cannot ask, so a warning becomes a deny that tells the agent to ask you; set `"hooks": {"onWarn": "allow"}` to let warnings through instead. Codex hooks cannot rewrite a command either, so an update (`git pull` in an installed skill, `npx skills update`, `codex plugin marketplace upgrade`, `pi update`) is refused with the `skill-scanner guard ...` command to run instead. Codex's `requirements.toml` can restrict hooks to managed ones; `doctor` reports when hooks are disabled.
+
+`codex plugin add <plugin>@<marketplace>` is scanned before it runs: a local plugin in the marketplace's directory, or the git repository or npm package the marketplace names, fetched the way Codex fetches it. Plugins from the remote catalogue are audited at the next session start.
+
+**Not gated before install:** at startup Codex refreshes git marketplaces and reinstalls their plugins itself, with git's configuration variables cleared; those updates are audited at session start and flagged plugins' skills are blocked at use time.
 
 Manual install: copy [plugins/codex/hooks.json](../plugins/codex/hooks.json) into `~/.codex/hooks.json` (it calls `skill-scanner` from `PATH`), then trust it in `/hooks`.
 
@@ -76,7 +80,9 @@ To load it from npm instead, add `"plugin": ["@french-castle/skill-scanner/openc
 
 To load it as a package instead: `pi install npm:@french-castle/skill-scanner`.
 
-**Not gated:** `pi -ne` and `--no-skills` skip extensions and discovered skills. Pi package installs run `npm install` with lifecycle scripts; the pre-scan covers `pi install` run by the agent or typed after `!`, but a package listed in settings and auto-installed at startup is audited only after it lands. `pi update` moves checkouts without a git checkout, so `skill-scanner guard` cannot see it.
+`pi update --extensions`, `--all`, or `pi update <source>` is gated too: the npm versions it would install are scanned first (Pi runs their install scripts), and the command runs under `skill-scanner guard`, which scans each git package's new commit at its fetch, before `npm install`. `pi update` alone updates Pi itself and is left alone.
+
+**Not gated:** `pi -ne` and `--no-skills` skip extensions and discovered skills. Pi package installs run `npm install` with lifecycle scripts; the pre-scan covers `pi install` and `pi update` run by the agent or typed after `!`, but a package listed in settings and auto-installed or refreshed at startup is audited only after it lands.
 
 ## npx skills
 
@@ -85,6 +91,7 @@ There is no hook in the `skills` CLI. Two ways to gate it:
 ```bash
 skill-scanner add owner/repo -g -a claude-code          # instead of npx skills add
 skill-scanner guard npx skills update                    # updates and checks
+skill-scanner guard git -C ~/.claude/skills/x pull       # any git update of an installed skill
 ```
 
 `add` scans the source, then runs the real `npx -y skills@1 add` with git configuration that makes it clone the copy that was scanned, so what lands on disk is what was reviewed, and `skills-lock.json` records the original source. It also points the CLI's snapshot download at a dead address so the few owners it serves from snapshots are cloned, and scanned, too. Set `SKILL_SCANNER_SKILLS_CLI` to use another skills command (for example `bunx skills`).

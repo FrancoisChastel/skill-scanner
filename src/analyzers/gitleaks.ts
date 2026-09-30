@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { maskSecret } from "../core/secrets";
 import type { Finding, Severity } from "../core/types";
@@ -15,6 +15,7 @@ import {
   toolAnalyzer,
 } from "./common";
 import { which } from "./run";
+import { stageTree } from "./stage";
 import type { AnalyzerInfo, ToolDriver } from "./types";
 
 /**
@@ -26,9 +27,10 @@ import type { AnalyzerInfo, ToolDriver } from "./types";
  *
  * Gitleaks reads configuration from the scanned tree: `<root>/.gitleaks.toml` (it can allowlist every
  * path), `.gitleaksignore` in the cwd, and `gitleaks:allow` comments. The pinned `--config`, a private
- * cwd and ignore path, and `--ignore-gitleaks-allow` take those away from the skill. One remains that
- * no flag disables: `<root>/.gitleaksignore` (cmd/root.go); its entries must match the absolute path
- * gitleaks reports, and the core `packaging/unexpected-dotfile` rule flags the file.
+ * cwd and ignore path, and `--ignore-gitleaks-allow` take those away from the skill. No flag stops it
+ * reading `<root>/.gitleaksignore` (cmd/root.go, v8.30.1), so when the tree has one, gitleaks scans a
+ * copy of the tree without it (hard links, in the private work directory). The core
+ * `packaging/unexpected-dotfile` rule still reports the file.
  */
 
 export const GITLEAKS_INFO: AnalyzerInfo = {
@@ -45,6 +47,8 @@ export const GITLEAKS_INFO: AnalyzerInfo = {
 /** The built-in rule set, whatever the scanned tree ships. */
 const PINNED_CONFIG = 'title = "skill-scanner"\n\n[extend]\nuseDefault = true\n';
 const MAX_FILE_MEGABYTES = "10";
+const IGNORE_FILE = ".gitleaksignore";
+const MAX_STAGED_ENTRIES = 100_000;
 
 export function gitleaksArgs(root: string, report: string, config: string, ignoreDir: string): string[] {
   return [
@@ -118,9 +122,26 @@ export const gitleaksDriver: ToolDriver = {
       const report = join(workDir, "gitleaks.json");
       const config = join(workDir, "gitleaks.toml");
       await writeFile(config, PINNED_CONFIG, "utf8");
-      expectExit("gitleaks", await exec(gitleaksArgs(root, report, config, workDir)), [0]);
+      const target = (await hasRootIgnoreFile(root)) ? await stageWithoutIgnoreFile(root, join(workDir, "tree")) : root;
+      expectExit("gitleaks", await exec(gitleaksArgs(target, report, config, workDir)), [0]);
       const text = await readReport(report, "gitleaks");
       if (text === undefined) throw new Error("gitleaks did not write its report");
-      return parseGitleaksOutput(text, root);
+      return parseGitleaksOutput(text, target);
     }),
 };
+
+/** Case-insensitively, since gitleaks' check matches any case on macOS and Windows file systems. */
+async function hasRootIgnoreFile(root: string): Promise<boolean> {
+  const names = await readdir(root).catch(() => [] as string[]);
+  return names.some((name) => name.toLowerCase() === IGNORE_FILE);
+}
+
+/** The tree without its root `.gitleaksignore`, so the scanned skill cannot silence gitleaks. */
+export async function stageWithoutIgnoreFile(root: string, dest: string): Promise<string> {
+  await stageTree(root, dest, {
+    skip: (rel) => rel.toLowerCase() === IGNORE_FILE,
+    maxFileBytes: Number(MAX_FILE_MEGABYTES) * 1024 * 1024,
+    maxEntries: MAX_STAGED_ENTRIES,
+  });
+  return dest;
+}

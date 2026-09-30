@@ -55,7 +55,7 @@ describe("guard", () => {
   test("refusals logged by the hook are repeated, and a command that swallowed one does not exit 0", async () => {
     const r = await run([process.execPath, probe], env({ PROBE_REFUSE: "1", PROBE_EXIT: "0" }));
     expect(r.code).toBe(1);
-    expect(r.err).toContain("skill-scanner guard refused these checkouts:\nskill-scanner blocked evil/repo: 1 critical.");
+    expect(r.err).toContain("skill-scanner guard refused these checkouts and updates:\nskill-scanner blocked evil/repo: 1 critical.");
     expect((await run([process.execPath, probe], env({ PROBE_REFUSE: "1", PROBE_EXIT: "4" }))).code).toBe(4);
     const quiet = await run([process.execPath, probe]);
     expect(quiet.err).toBe("");

@@ -114,7 +114,11 @@ When installed, and when enabled by `--with` or the config, established tools ru
 |---|---|---|---|
 | `npx skills add <src>` typed by the user | `skill-scanner add <src>` fetches, scans, and asks or refuses | the delegated `skills add` installs from the scanned mirror (`url.<mirror>.insteadOf`), with a git `post-checkout` hook as a backstop | |
 | `npx skills add` run by an agent | Claude Code / Codex hook, OpenCode plugin, or Pi extension pre-scans the source and denies, asks, or allows | the command is rewritten to run under `skill-scanner guard` where the harness allows it | post-tool reconciliation rescans skill directories |
-| `npx skills update`, `check` | not scannable in advance | `skill-scanner guard -- npx skills update` scans every git checkout | reconciliation |
+| `npx skills update`, `check` | not scannable in advance | run under `guard` (rewritten by the hooks and plugins; Codex is told to) | reconciliation |
+| `git pull`, `reset`, `merge`, `rebase`, `checkout` in an installed skill or plugin repository | not scannable in advance | run under `guard`: its `reference-transaction` hook scans the commit the branch (or its upstream) is about to move to and aborts a refused move, restoring the working tree; `post-checkout` switches a refused checkout back | reconciliation |
+| `pi update --extensions`, `--all`, `<source>` | the npm versions it would install are fetched and scanned | `guard` refuses a git package's update at its fetch, before `npm install` | reconciliation |
+| `claude plugin update`, `claude plugin marketplace update`, `codex plugin marketplace upgrade` | not scannable in advance | `guard` scans the clones and pulls they make | session-start audit |
+| `codex plugin add <plugin>@<marketplace>` | the plugin's directory in the marketplace, or the git or npm source it names, is scanned | | session-start audit |
 | Codex `skill-installer` | hook pre-scans `--repo`/`--path` or `--url` | | reconciliation |
 | Claude Code `plugin marketplace add`, `plugin install` from a shell | hook pre-scans the marketplace repository or the plugin's source | | session-start audit of the plugin cache |
 | `/plugin install` inside Claude Code | no hook exists for it | | session-start audit; a flagged plugin's skills are blocked at use time |
@@ -131,7 +135,7 @@ Use-time blocking: Claude Code `PreToolUse` on the `Skill` tool and `UserPromptE
 - **OpenCode**: a plugin (`tool.execute.before` throws to block, `tool.execute.after` reconciles, `command.execute.before` blocks flagged slash commands).
 - **Pi**: an extension (`tool_call` blocks or confirms, `user_bash` for `!cmd`, `input` for `/skill:name`, `before_agent_start` hides flagged skills, `session_start` audits).
 
-`setup` copies a self-contained runtime to `~/.skill-scanner/bin` and points every hook at it with an absolute Node path, so hooks never depend on `npx`, a network, or `PATH`.
+`setup` copies a self-contained runtime to `~/.skill-scanner/bin` and points every hook at it with an absolute Node path, so hooks never depend on `npx`, a network, or `PATH`. Hooks, the git hooks, and the OpenCode and Pi adapters scan in worker threads started from that runtime (D-021).
 
 ## 12. State
 
@@ -161,6 +165,9 @@ Offline by default. Fetching a remote source to scan it uses git or npm with the
 - **D-019 Unchecked writes into skill folders are refused.** A write cannot ask, so when the pre-write scan errors or times out the write is denied unless `hooks.onError` is `allow`.
 - **D-016 `npx skills` is judged on what it installs.** The skills CLI copies skill folders only, so for its installs (pre-scan, `add`, and the post-checkout hook under `guard`) the verdict comes from skill bundles; the rest of the repository is reported but does not decide. Collection-limit notes are kept so padding cannot hide a skill. `pi install`, plugin installs, and plain clones are judged on everything, because they run package scripts and hooks.
 - **D-017 Judge confirmation raises confidence one step.** A finding its context demoted can be restored, but a model cannot move anything further than one step.
+- **D-020 Updates are gated at the ref, not predicted.** What `git pull` or `pi update` will bring cannot be known before it is fetched, so update commands run under `guard`, whose `reference-transaction` hook sees every ref move in the `prepared` state, before it is committed. It scans the tree of the commit that HEAD, the checked-out branch, or that branch's upstream is about to point to (checked out through a temporary index, so the repository is untouched) and refuses the transaction when the scan does. A pull is therefore refused at its fetch, before the working tree changes; `reset`, `merge`, and `rebase` write the working tree before they move the branch, so the hook's `aborted` call moves it back with `git read-tree -m -u`, which keeps unrelated local changes. Trees that passed are remembered for the rest of the command, so the fetch and the fast-forward after it scan once.
+- **D-021 Scans run in a worker thread.** Rules run synchronously, so a hook deadline is only as good as the scan's willingness to yield. Hooks, the git hooks, `add`, and the adapters scan in a worker started from the CLI entry; the caller's event loop stays free, its deadline fires, and the worker is terminated wherever it is (V8 interrupts even a backtracking regular expression). Each isolated scan also has a two-minute hard cap and a heap cap, for long-lived hosts.
+- **D-022 gitleaks scans a copy when the skill ships a `.gitleaksignore`.** No gitleaks flag stops it reading `<root>/.gitleaksignore`, so in that case it is given a hard-linked copy of the tree without the file.
 - **D-018 External tools cannot be switched off by the skill.** Analyzers run with pinned or empty configuration and with ignore files, inline suppressions, and default skip lists disabled, because a skill can ship `.gitleaks.toml`, `.semgrepignore`, or `osv-scanner.toml` of its own. Such files are also reported (`packaging/scanner-suppression-file`).
 
 ## 15. Known gaps and risks
@@ -170,13 +177,14 @@ Offline by default. Fetching a remote source to scan it uses git or npm with the
 - There is no hook for `/plugin install` inside Claude Code or for skills synced from claude.ai; those are caught by the session-start audit and blocked at use time, after they are on disk.
 - Harness flags that disable hooks or plugins (`--bare`, `disableAllHooks`, `OPENCODE_PURE`, `pi -ne`) disable the scanner too. The agent itself can edit its hook configuration unless the harness's permissions prevent it.
 - The trusted-installer list (vendor install scripts piped to a shell are reported at medium rather than critical) is a judgment call that needs maintenance.
-- The git backstop sees checkouts only. Updates that move an existing checkout without one (`git pull`, `git reset`, `pi update`) are not scanned until the next audit. A `reference-transaction` hook could close this.
-- gitleaks honors a `.gitleaksignore` at the scan root and has no flag to disable it; the file is reported, not neutralised.
+- The git hooks see ref moves and checkouts. Working-tree writes that move no ref (`git restore`, `git apply`, `git checkout <commit> -- <path>`) are caught by the post-change audit, not before. A `git pull` in a project whose repository merely contains a skills folder is not wrapped (that would scan the whole project on every pull); project skills changed that way are audited after the command.
+- Updates run outside an agent (your terminal) are gated only when wrapped in `skill-scanner guard`. Codex refreshes git marketplaces and reinstalls their plugins at startup with git's configuration variables cleared, so those updates are audited, not gated.
+- `pi update` scans the npm versions it resolves; a version published between that scan and Pi's install would be installed unscanned until the next audit.
 - Scans run by the git hook have file and byte limits but no time limit, and our own clones have a time limit but no size cap.
 - Codex runs hooks only after the user trusts them in `/hooks`, and Codex and OpenCode cannot ask, so a warning there becomes a deny with instructions.
 - Rules were calibrated against the corpora in `docs/evaluation.md`; other ecosystems will surface new false positives.
-- Hook deadlines are cooperative. A rule regular expression that backtracked catastrophically on hostile input would block the event loop past the harness timeout, and Claude Code lets a timed-out call through. Rules use bounded quantifiers and were stress-tested without finding one; the planned fix is to run install-time scans in a worker thread that can be terminated on the deadline.
-- `codex plugin add <plugin>@<marketplace>` is not pre-scanned; the marketplace was scanned when it was added (`codex plugin marketplace add`), and installed plugins are audited at session start.
+- Scans run in a terminable worker (D-021), but recognising installs in the command text runs on the hook's own thread. That text comes from the agent, is capped at 1 MB, and goes through a linear tokenizer.
+- `codex plugin add` from Codex's remote catalogue, from a custom npm registry, or from a git repository on disk pinned to a ref is not resolved before install; it is audited at session start.
 
 ## 16. References
 

@@ -81,8 +81,8 @@ A skill blocks when any finding reaches high severity (low-confidence findings c
 |---|---|
 | `npx skills add owner/repo` | The hook (Claude Code, Codex) or plugin (OpenCode, Pi) fetches and scans the source first. A block is denied with the findings; a warning asks you. A pass runs the install under `skill-scanner guard`, which scans every git checkout it makes. |
 | `skill-scanner add owner/repo [skills flags]` | Scans, then runs the real `npx skills add` so it installs exactly the checkout that was scanned (git `insteadOf` onto the scanned copy). Lock files and source metadata stay the CLI's own. |
-| `npx skills update`, `check` | Wrap them: `skill-scanner guard npx skills update`. |
-| Codex's skill-installer, `pi install`, `claude plugin marketplace add`, `git clone` into a skill folder | Pre-scanned by the hooks and plugins. |
+| Codex's skill-installer, `pi install`, `claude plugin marketplace add`, `codex plugin add`, `git clone` into a skill folder | Pre-scanned by the hooks and plugins. |
+| Updates: `npx skills update`, `git pull` (or `reset`, `merge`, `checkout`) in an installed skill, `pi update`, `claude plugin update`, plugin marketplace updates | Run under `skill-scanner guard` (Codex, which cannot rewrite a command, is told to run the guarded one). The guard scans the incoming commit before the branch moves: a refused update is aborted and the working tree put back. `pi update` also has the npm versions it would install scanned first. In a terminal, wrap them yourself: `skill-scanner guard git pull`. |
 | `/plugin install` inside Claude Code, skills synced from claude.ai, files copied by hand | Found by the session-start audit; a flagged skill is blocked when the agent tries to use it. |
 
 Blocked skills found after install are moved to `~/.skill-scanner/quarantine` (restorable with `skill-scanner audit --restore <id>`). If you reviewed a flagged skill and want it anyway, approve its exact contents with `skill-scanner trust <path>`; any later change flags it again. [docs/harnesses.md](./docs/harnesses.md) lists the hooks per harness and the manual and marketplace installs.
@@ -94,7 +94,7 @@ Blocked skills found after install are moved to `~/.skill-scanner/quarantine` (r
 | `scan [target...]` | Scan local paths or remote sources |
 | `add <source> [skills flags]` | Scan, then install with `npx skills add` if it passes |
 | `audit` | Scan every installed skill and plugin; `--quarantine`, `--list-quarantine`, `--restore <id>` |
-| `guard <command...>` | Run a command with every git checkout it makes scanned first |
+| `guard <command...>` | Run a command with every git checkout and update it makes scanned first |
 | `setup [harness...]` | Install hooks and plugins; `--dry-run`, `--project`, `--uninstall`, `--purge` |
 | `doctor` | Check the installation and print the fix for anything broken |
 | `trust <path>` | Approve a reviewed skill's exact contents; `--list`, `--remove` |
@@ -178,7 +178,7 @@ Early. The rules were calibrated on about 3,600 public and locally installed ski
 
 - It does not understand intent. A skill that asks for something harmful in ordinary words, matching no pattern, passes unless the judge flags it.
 - It is not a sandbox. A skill you trust runs with your permissions; use your harness's permission system and sandbox for what must never happen.
-- Some paths have no hook: `/plugin install` inside Claude Code and claude.ai-synced skills are caught after they land, and updates that move a checkout without checking it out (`git pull`, `pi update`) bypass the git backstop.
+- Some paths have no hook: `/plugin install` inside Claude Code, claude.ai-synced skills, updates you run in your own terminal without `guard`, and the git marketplaces Codex refreshes at startup are caught after they land.
 - Harness options that disable hooks or plugins disable it too.
 
 [DESIGN.md](./DESIGN.md#15-known-gaps-and-risks) has the full list.

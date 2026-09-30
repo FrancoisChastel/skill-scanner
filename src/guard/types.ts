@@ -25,8 +25,20 @@ export type InstallIntent =
   | { readonly kind: "git-clone"; readonly url: string; readonly dest?: string; readonly ref?: string }
   | { readonly kind: "codex-skill-installer"; readonly source: string; readonly paths: readonly string[] }
   | { readonly kind: "claude-plugin"; readonly action: "install" | "marketplace-add"; readonly target: string }
-  | { readonly kind: "codex-plugin"; readonly action: "add" | "marketplace-add"; readonly target: string }
+  | {
+      readonly kind: "codex-plugin";
+      readonly action: "add" | "marketplace-add";
+      readonly target: string;
+      /** `--marketplace <name>`, for `codex plugin add <plugin> -m <name>`. */
+      readonly marketplace?: string;
+    }
   | { readonly kind: "pi-install"; readonly source: string }
+  /** `pi update <source>`, `pi update --extensions`, or `--all`: installed Pi packages move to newer versions. */
+  | { readonly kind: "pi-update"; readonly source?: string }
+  /** `git pull`, `reset`, `merge`, `rebase`, `checkout`, ... in the repository of an installed skill or plugin. */
+  | { readonly kind: "git-update"; readonly dir: string; readonly subcommand: string }
+  /** `claude plugin update`, `claude plugin marketplace update`, `codex plugin marketplace upgrade`. */
+  | { readonly kind: "plugin-update"; readonly harness: "claude-code" | "codex"; readonly target?: string }
   | { readonly kind: "opencode-plugin"; readonly target: string }
   /** A download, copy, link, or extraction whose destination is inside a skill directory. */
   | { readonly kind: "write-to-skill-dir"; readonly dest: string; readonly via: string };
@@ -41,6 +53,12 @@ export interface GuardDecision {
   readonly report?: ScanReport;
   /** When set, the harness may run this command instead (Claude Code `updatedInput`). */
   readonly rewrite?: string;
+  /**
+   * The command updates something that cannot be scanned before it runs, so it is only safe under
+   * `guard`, which scans each update before it lands. A harness that cannot run `rewrite` instead
+   * must refuse the command and show `rewrite`.
+   */
+  readonly guardRequired?: boolean;
   /** What was being installed or written, as the command named it (or the skill directory). */
   readonly source?: string;
 }

@@ -395,7 +395,7 @@ export const packagingRules: readonly BundleRule[] = [
     description:
       "An ignore, baseline, or config file for a security scanner (gitleaks, Semgrep, TruffleHog, detect-secrets, Snyk, Bandit, Trivy, Grype, OSV-Scanner, or skill-scanner itself). A skill has no use for one except to switch a scanner off for its own content.",
     remediation:
-      "Remove the file. skill-scanner never reads configuration from the target it scans, and runs its optional scanners with their ignore files disabled, except gitleaks' .gitleaksignore, which gitleaks cannot be told to skip.",
+      "Remove the file. skill-scanner never reads configuration from the target it scans, and runs its optional scanners with their ignore files disabled (gitleaks, which cannot be told to skip a .gitleaksignore, is given a copy of the tree without it).",
     scope: "bundle",
     check(ctx) {
       for (const f of ctx.bundle.files) {

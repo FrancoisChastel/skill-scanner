@@ -9,6 +9,7 @@ import { flaggedReason } from "../../src/guard/messages";
 import { loadFlagged } from "../../src/guard/state";
 import type { GuardContext, SkillRoot } from "../../src/guard/types";
 import { summarizeForAgent } from "../../src/report/index";
+import { guardCommandLine } from "../../src/sources/guard-env";
 import { BLOCK_MARK, fixedReport, fixedSources, guardCtx, markerScanner, type TempHome, tempHome, WARN_MARK, writeSkill } from "./helpers";
 
 let h: TempHome;
@@ -71,6 +72,16 @@ describe("PreToolUse", () => {
     expect(await handleCodexEvent(bash("npx skills add o/good"), { ...ctx, runtime: { node: "/n", script: "/s" } }, deps)).toEqual({
       exitCode: 0,
     });
+  });
+
+  test("an update needs the guard, which Codex cannot swap in: refused with the command to run instead", async () => {
+    const runtime = { node: "/n", script: "/s" };
+    const cmd = `git -C ${join(h.env.CLAUDE_CONFIG_DIR!, "skills", "x")} pull`;
+    const out = await handleCodexEvent(bash(cmd), { ...ctx, runtime }, deps);
+    const reason = JSON.parse(out.stdout ?? "{}").hookSpecificOutput.permissionDecisionReason as string;
+    expect(reason).toContain(`Run it as:\n  ${guardCommandLine(runtime, cmd)}`);
+    // The guarded command itself names no install the hook would stop again.
+    expect(await handleCodexEvent(bash(guardCommandLine(runtime, cmd)), { ...ctx, runtime }, deps)).toEqual({ exitCode: 0 });
   });
 
   test("argv-style commands from older shell tools are understood", async () => {

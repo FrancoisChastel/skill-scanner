@@ -11,6 +11,9 @@ import { ProgramError, runProgram } from "./exec";
  * the environment and git reads config from GIT_CONFIG_COUNT/KEY_n/VALUE_n. That gives us:
  * - `core.hooksPath=<temp dir>` whose `post-checkout` runs `skill-scanner hook git-post-checkout`
  *   inside each fresh checkout; a non-zero exit makes git (and so the installer) fail.
+ * - In the same directory, a `reference-transaction` hook that scans the commit a checked-out
+ *   branch (or its upstream) is about to move to, and aborts the move when the scan refuses it:
+ *   the gate for updates (`git pull`, `git reset`, `pi update`), which never check out.
  * - `url.<mirror>.insteadOf=<clone URL>` so an install clones the exact checkout we already scanned.
  * - SKILLS_DOWNLOAD_URL pointed at a dead port, so the skills CLI's snapshot-API fast path (which
  *   bypasses git and therefore the hook) falls back to cloning.
@@ -75,9 +78,14 @@ export async function guardEnv(opts: GuardEnvOptions, baseEnv: NodeJS.ProcessEnv
   };
   try {
     const previous = await previousHooksPath(baseEnv, hooksDir, opts.timeoutMs ?? 10_000);
-    const hook = join(hooksDir, "post-checkout");
-    await writeFile(hook, postCheckoutScript(opts, previous, hooksDir), { mode: 0o755 });
-    await chmod(hook, 0o755);
+    for (const [name, script] of [
+      ["post-checkout", postCheckoutScript(opts, previous, hooksDir)],
+      ["reference-transaction", referenceTransactionScript(opts, previous, hooksDir)],
+    ] as const) {
+      const hook = join(hooksDir, name);
+      await writeFile(hook, script, { mode: 0o755 });
+      await chmod(hook, 0o755);
+    }
     const gitConfig: [string, string][] = [["core.hooksPath", hooksDir], ...mirrorEntries(opts.extraMirrors ?? [])];
     const approved = mergeApproved(baseEnv[APPROVED_COMMITS_ENV], opts.approvedCommits ?? []);
     const env: NodeJS.ProcessEnv = {
@@ -175,25 +183,56 @@ export function postCheckoutScript(runtime: GuardRuntime, previous: PreviousHook
     "# skill-scanner guard: every checkout is scanned before anything uses it; a non-zero exit fails it.",
     "# Generated for one guarded command and removed when that command exits.",
     "dir=$(pwd -P) || exit 1",
-    `(cd ${shellQuote(hooksDir)} && exec ${shellQuote(runtime.node)} ${shellQuote(runtime.script)} hook git-post-checkout --dir "$dir" "$@") || exit $?`,
-    ...chainLines(previous),
+    'gitdir=$(git rev-parse --absolute-git-dir) || gitdir=""',
+    `(cd ${shellQuote(hooksDir)} && exec ${shellQuote(runtime.node)} ${shellQuote(runtime.script)} hook git-post-checkout --dir "$dir" --git-dir "$gitdir" "$@") || exit $?`,
+    ...chainLines(previous, "post-checkout", 'exec "$prev" "$@"'),
     "exit 0",
     "",
   ].join("\n");
 }
 
-function chainLines(previous: PreviousHooks): string[] {
+/**
+ * The update gate. Git feeds `<old> <new> <ref>` lines on stdin and the state as `$1`. Only the
+ * `prepared` and `aborted` calls that move an existing HEAD, branch, or remote-tracking branch to
+ * another commit reach the scanner (clones create refs, and are scanned by post-checkout). A
+ * non-zero exit in `prepared` aborts the transaction. The previous hook, if any, then gets the
+ * same input.
+ */
+export function referenceTransactionScript(runtime: GuardRuntime, previous: PreviousHooks, hooksDir: string): string {
+  return [
+    "#!/bin/sh",
+    "# skill-scanner guard: a checked-out branch (or its upstream) only moves to a commit that passed the scan.",
+    "# Generated for one guarded command and removed when that command exits.",
+    "input=$(cat)",
+    'case "$1" in',
+    "prepared|aborted)",
+    "  moves=$(printf '%s\\n' \"$input\" | grep -E '^[0-9a-f]{40,64} [0-9a-f]{40,64} (HEAD|refs/heads/.+|refs/remotes/.+)$' | grep -vE '^0+ |^[0-9a-f]+ 0+ ')",
+    '  if [ -n "$moves" ]; then',
+    "    dir=$(pwd -P) || exit 1",
+    '    gitdir=$(git rev-parse --absolute-git-dir) || gitdir=""',
+    `    printf '%s\\n' "$moves" | (cd ${shellQuote(hooksDir)} && exec ${shellQuote(runtime.node)} ${shellQuote(runtime.script)} hook git-reference-transaction --dir "$dir" --git-dir "$gitdir" "$1") || { code=$?; [ "$1" = prepared ] && exit $code; }`,
+    "  fi",
+    "  ;;",
+    "esac",
+    ...chainLines(previous, "reference-transaction", `{ [ -z "$input" ] || printf '%s\\n' "$input"; } | "$prev" "$@"; exit $?`),
+    "exit 0",
+    "",
+  ].join("\n");
+}
+
+/** Runs `invoke` on the hook git would have run without us (`$prev`), if there is one. */
+function chainLines(previous: PreviousHooks, hook: string, invoke: string): string[] {
   if (previous.kind === "relative") return ["# A relative core.hooksPath is not chained: it would run hooks shipped inside the checkout."];
   const locate =
     previous.kind === "dir"
-      ? [`prev=${shellQuote(join(previous.path, "post-checkout"))}`]
+      ? [`prev=${shellQuote(join(previous.path, hook))}`]
       : [
-          "# No core.hooksPath configured: run the repository's own post-checkout (clones never bring hooks along).",
+          `# No core.hooksPath configured: run the repository's own ${hook} (clones never bring hooks along).`,
           'common=$(git rev-parse --git-common-dir 2>/dev/null) || common=""',
           'prev=""',
-          'if [ -n "$common" ]; then prev="$common/hooks/post-checkout"; fi',
+          `if [ -n "$common" ]; then prev="$common/hooks/${hook}"; fi`,
         ];
-  return [...locate, 'if [ -n "$prev" ] && [ -f "$prev" ] && [ -x "$prev" ]; then exec "$prev" "$@"; fi'];
+  return [...locate, `if [ -n "$prev" ] && [ -f "$prev" ] && [ -x "$prev" ]; then ${invoke}; fi`];
 }
 
 /** A shell command that runs `command` under `skill-scanner guard`, for hooks that rewrite commands. */

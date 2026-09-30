@@ -22,6 +22,18 @@ To scan and install in one step through the `skills` CLI, use `add` in place of 
 npx -y @french-castle/skill-scanner add <source> [--skill <name>] [-g] [-a <agent>]
 ```
 
+## Updating an installed skill
+
+An update can change a skill that passed at install time, so run updates under the guard. It scans each new version before it lands and refuses (and undoes) one that fails:
+
+```bash
+npx -y @french-castle/skill-scanner guard -- git -C <skill-directory> pull
+npx -y @french-castle/skill-scanner guard -- npx skills update
+npx -y @french-castle/skill-scanner guard -- pi update --extensions
+```
+
+If a `skill-scanner` hook refuses an update and names a guarded command to run instead, run exactly that command.
+
 ## Reading the result
 
 - **PASS**: no finding reached the warning threshold. Install as the user asked.

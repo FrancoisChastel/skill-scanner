@@ -157,6 +157,54 @@ export function parseGitClone(words: readonly string[], state: DetectState): Ins
   return { kind: "git-clone", url, ...(destPath || dest ? { dest: destPath ?? dest! } : {}), ...(ref ? { ref } : {}) };
 }
 
+// ---- git updates of an installed skill's repository
+
+/** Subcommands that can move a checked-out branch or HEAD to content from elsewhere (so `guard`'s hooks scan it). */
+const GIT_UPDATES = new Set(["pull", "merge", "rebase", "reset", "checkout", "switch", "cherry-pick", "am"]);
+/** Options of checkout and switch that take a value (a new branch's name is not where it starts). */
+const CHECKOUT_VALUES = new Set(["-b", "-B", "-c", "-C", "--orphan", "--create", "--force-create", "--conflict", "--pathspec-from-file"]);
+
+export function parseGitUpdate(words: readonly string[], state: DetectState): InstallIntent | undefined {
+  if (programName(words[0]) !== "git") return undefined;
+  let dir = state.cwd;
+  let i = 1;
+  for (; i < words.length && words[i]!.startsWith("-"); i += 1) {
+    const w = words[i]!;
+    if (w === "-C") dir = resolvePath(words[i + 1] ?? ".", { ...state, cwd: dir }) ?? dir;
+    else if (w === "--work-tree") dir = resolvePath(words[i + 1] ?? ".", { ...state, cwd: dir }) ?? dir;
+    else if (w.startsWith("--work-tree=")) dir = resolvePath(w.slice(12), { ...state, cwd: dir }) ?? dir;
+    if (GIT_GLOBAL_VALUES.has(w)) i += 1;
+  }
+  const sub = words[i];
+  if (sub === undefined || !GIT_UPDATES.has(sub) || dir === undefined || !isInsideSkillRoot(dir, state.roots)) return undefined;
+  if (bringsNothingNew(sub, words.slice(i + 1))) return undefined;
+  return { kind: "git-update", dir, subcommand: sub };
+}
+
+/**
+ * Local work in a skill's repository that cannot bring in anything the repository does not already
+ * have checked out: a new branch at HEAD, restoring paths from the index, a reset to HEAD, giving
+ * up a rebase or merge. Wrapping those would only get in the way of someone developing a skill.
+ */
+function bringsNothingNew(sub: string, args: readonly string[]): boolean {
+  if (args.some((w) => w === "-h" || w === "--help" || w === "--abort" || w === "--quit")) return true;
+  const end = args.indexOf("--");
+  const before = end === -1 ? args : args.slice(0, end);
+  const operands: string[] = [];
+  for (let k = 0; k < before.length; k += 1) {
+    const w = before[k]!;
+    if (w.startsWith("-") && w !== "-") {
+      if ((sub === "checkout" || sub === "switch") && CHECKOUT_VALUES.has(w)) k += 1;
+      continue;
+    }
+    operands.push(w);
+  }
+  // No start point: a new branch at HEAD, or paths restored from the index.
+  if (sub === "checkout" || sub === "switch") return operands.length === 0;
+  if (sub === "reset") return operands.every((w) => w === "HEAD" || w === "@");
+  return false;
+}
+
 // ---- Codex's built-in skill-installer
 
 const CODEX_INSTALLER = /(?:^|[\\/])install-skill-from-github\.py$/;
@@ -213,7 +261,28 @@ function positionals(words: readonly string[], valueFlags: ReadonlySet<string>):
   return out;
 }
 
-const PLUGIN_VALUE_FLAGS = new Set(["-s", "--scope", "--sparse", "--ref"]);
+const PLUGIN_VALUE_FLAGS = new Set([
+  "-s",
+  "--scope",
+  "--sparse",
+  "--ref",
+  "-m",
+  "--marketplace",
+  "-c",
+  "--config",
+  "--enable",
+  "--disable",
+]);
+
+/** The value of `-m`/`--marketplace` (either spelling, `--marketplace=x` too). */
+function marketplaceFlag(words: readonly string[]): string | undefined {
+  for (let i = 1; i < words.length; i += 1) {
+    const w = words[i]!;
+    if ((w === "-m" || w === "--marketplace") && words[i + 1]) return words[i + 1];
+    if (w.startsWith("--marketplace=")) return w.slice(14);
+  }
+  return undefined;
+}
 
 export function parseClaudePlugin(words: readonly string[]): InstallIntent | undefined {
   if (programName(words[0]) !== "claude") return undefined;
@@ -221,6 +290,8 @@ export function parseClaudePlugin(words: readonly string[]): InstallIntent | und
   if (group !== "plugin" && group !== "plugins") return undefined;
   if ((action === "install" || action === "i") && a) return { kind: "claude-plugin", action: "install", target: a };
   if (action === "marketplace" && a === "add" && b) return { kind: "claude-plugin", action: "marketplace-add", target: b };
+  if (action === "update" && a) return { kind: "plugin-update", harness: "claude-code", target: a };
+  if (action === "marketplace" && a === "update") return { kind: "plugin-update", harness: "claude-code", ...(b ? { target: b } : {}) };
   return undefined;
 }
 
@@ -228,8 +299,13 @@ export function parseCodexPlugin(words: readonly string[]): InstallIntent | unde
   if (programName(words[0]) !== "codex") return undefined;
   const [group, action, a, b] = positionals(words, PLUGIN_VALUE_FLAGS);
   if (group !== "plugin" && group !== "plugins") return undefined;
-  if ((action === "add" || action === "install") && a) return { kind: "codex-plugin", action: "add", target: a };
+  if ((action === "add" || action === "install") && a) {
+    const marketplace = marketplaceFlag(words);
+    return { kind: "codex-plugin", action: "add", target: a, ...(marketplace ? { marketplace } : {}) };
+  }
   if (action === "marketplace" && a === "add" && b) return { kind: "codex-plugin", action: "marketplace-add", target: b };
+  if (action === "marketplace" && (a === "upgrade" || a === "update"))
+    return { kind: "plugin-update", harness: "codex", ...(b ? { target: b } : {}) };
   return undefined;
 }
 
@@ -242,7 +318,15 @@ export function parsePi(words: readonly string[]): InstallIntent | undefined {
   }
   const [action, source] = positionals(words, new Set());
   if (action === "install" && source) return { kind: "pi-install", source };
+  if (action === "update") return piUpdate(words, source);
   return undefined;
+}
+
+/** `pi update` alone, `self`, and `pi` update Pi itself; `--extensions`, `--all`, or a source update packages. */
+function piUpdate(words: readonly string[], source: string | undefined): InstallIntent | undefined {
+  if (words.some((w) => w === "-h" || w === "--help")) return undefined;
+  if (source !== undefined) return source === "self" || source === "pi" ? undefined : { kind: "pi-update", source };
+  return words.some((w) => w === "--extensions" || w === "--all") ? { kind: "pi-update" } : undefined;
 }
 
 export function parseOpencodePlugin(words: readonly string[]): InstallIntent | undefined {

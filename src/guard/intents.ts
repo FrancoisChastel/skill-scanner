@@ -4,6 +4,7 @@ import {
   parseCodexInstaller,
   parseCodexPlugin,
   parseGitClone,
+  parseGitUpdate,
   parseOpencodePlugin,
   parsePi,
   parseSkillsCli,
@@ -60,6 +61,7 @@ function intentsOf(words: readonly string[], cmd: SimpleCommand, state: DetectSt
     const direct =
       parseSkillsCli(words) ??
       parseGitClone(words, state) ??
+      parseGitUpdate(words, state) ??
       parseCodexInstaller(words) ??
       parseClaudePlugin(words) ??
       parseCodexPlugin(words) ??

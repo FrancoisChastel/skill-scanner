@@ -1,18 +1,23 @@
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { type Config, ConfigError, DEFAULT_CONFIG, loadConfig } from "../../config";
 import { handleClaudeCodeEvent } from "../../guard/claude-code";
 import { handleCodexEvent } from "../../guard/codex";
 import { isRecord } from "../../guard/fsutil";
 import type { HandlerDeps } from "../../guard/hook-common";
+import { isolatedGuardDeps } from "../../guard/isolation";
 import type { GuardContext, HookResult } from "../../guard/types";
 import { runPostCheckout } from "../../sources/post-checkout";
+import { runRefTransaction } from "../../sources/ref-transaction";
 import type { Command } from "../command";
 import type { CliIO } from "../io";
 
 /**
- * `skill-scanner hook <claude-code|codex|git-post-checkout>`: the entry point `setup` registers.
+ * `skill-scanner hook <claude-code|codex|git-post-checkout|git-reference-transaction>`: the entry
+ * points `setup` registers, and the git hooks `guard` installs.
  * The event arrives as JSON on stdin. Whatever goes wrong here, an ordinary tool call must go
- * through: every unexpected path exits 0 with no output (exit 2 would block the call).
+ * through: every unexpected path exits 0 with no output (exit 2 would block the call). Scans run
+ * in worker threads, so the handlers' deadlines hold even against a scan that never yields.
  */
 
 const MAX_STDIN_BYTES = 1024 * 1024;
@@ -21,12 +26,12 @@ const HARNESSES = new Set(["claude-code", "codex"]);
 export const hookCommand: Command = {
   name: "hook",
   summary: "Handle a harness hook event (registered by `setup`; reads the event from stdin)",
-  usage: "<claude-code|codex|git-post-checkout> [args...]",
+  usage: "<claude-code|codex|git-post-checkout|git-reference-transaction> [args...]",
   flags: {},
   details: "Internal: harnesses run this with the event JSON on stdin. It prints hook output on stdout and never fails an ordinary call.",
   async run(argv, io) {
     try {
-      return await runHook(argv, io);
+      return await runHook(argv, io, isolatedGuardDeps());
     } catch {
       return 0;
     }
@@ -35,9 +40,13 @@ export const hookCommand: Command = {
 
 export async function runHook(argv: readonly string[], io: CliIO, deps: HandlerDeps = {}): Promise<number> {
   const [target, ...rest] = argv;
-  if (target === "git-post-checkout") return runPostCheckout(rest, io);
+  const gitDeps = deps.scanPath ? { scan: deps.scanPath } : {};
+  if (target === "git-post-checkout") return runPostCheckout(rest, io, gitDeps);
+  if (target === "git-reference-transaction") return runRefTransaction(rest, io, gitDeps);
   if (!target || !HARNESSES.has(target)) {
-    io.stderr(`skill-scanner hook: unknown harness "${target ?? ""}" (expected claude-code, codex, or git-post-checkout)\n`);
+    io.stderr(
+      `skill-scanner hook: unknown harness "${target ?? ""}" (expected claude-code, codex, git-post-checkout, or git-reference-transaction)\n`,
+    );
     return 0;
   }
   const payload = parsePayload(await io.readStdin());
@@ -84,11 +93,16 @@ function emit(result: HookResult, note: string | undefined, io: CliIO): void {
   if (stderr) io.stderr(stderr);
 }
 
-/** The installed runtime (or the npm bin), so decisions can rewrite commands to run under `guard`. */
+/** The installed runtime (or the npm bin, through its symlink), so decisions can rewrite commands to run under `guard`. */
 function detectRuntime(): GuardContext["runtime"] | undefined {
   const script = process.argv[1];
   if (!script) return undefined;
-  const abs = resolve(script);
+  let abs = resolve(script);
+  try {
+    abs = realpathSync(abs);
+  } catch {
+    // Keep the path as given.
+  }
   return /(?:^|[\\/])(?:skill-scanner\.mjs|cli\.js)$/.test(abs) ? { node: process.execPath, script: abs } : undefined;
 }
 

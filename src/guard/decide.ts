@@ -3,14 +3,16 @@ import { join, resolve } from "node:path";
 import type { ScanReport } from "../core/types";
 import { summarizeForAgent } from "../report/index";
 import { scanPath } from "../scan";
-import { guardCommandLine } from "../sources/guard-env";
+import { guardCommandLine, shellQuote } from "../sources/guard-env";
 import { type SourceScan, type SourceScanOptions, scanSource } from "../sources/index";
 import type { TargetScanner } from "./audit";
+import { codexPluginSource } from "./codex-plugin";
 import { withDeadline } from "./deadline";
 import { errorMessage, isInside, isRecord, readJsonFile } from "./fsutil";
 import { detectInstallIntents } from "./intents";
 import { harnessDirs, skillRoots } from "./locations";
-import { askReason, doNotRetry, scanErrorReason } from "./messages";
+import { askReason, doNotRetry, guardRequiredReason, scanErrorReason } from "./messages";
+import { piNpmUpdates } from "./pi-update";
 import { loadTrust, logDecision, trustedDigests } from "./state";
 import { guardTampering } from "./tamper";
 import type { GuardAction, GuardContext, GuardDecision, InstallIntent, SkillRoot, TrustStore } from "./types";
@@ -36,6 +38,8 @@ export interface GuardDeps {
 
 export const INSTALL_DEADLINE_MS = 100_000;
 export const ALLOW: GuardDecision = Object.freeze({ action: "allow", reason: "" });
+/** Nothing to scan before it runs: allowed only under `guard`, which scans each update as it lands. */
+const UNDER_GUARD: GuardDecision = Object.freeze({ action: "allow", reason: "", guardRequired: true });
 
 /** Decide whether a shell command may run: pre-scan whatever it would install. */
 export async function evaluateCommand(command: string, ctx: GuardContext, deps: GuardDeps = {}): Promise<GuardDecision> {
@@ -84,7 +88,7 @@ export async function evaluateIntents(
         ];
   const worst = mostSevere(decisions);
   const rewrite = ctx.runtime && worst.action !== "deny" && intents.some(isRewritable) ? guardCommandLine(ctx.runtime, command) : undefined;
-  const decision = rewrite ? { ...worst, rewrite } : worst;
+  const decision = withGuard(worst, rewrite, command);
   await logDecision(
     {
       harness: ctx.harness,
@@ -102,10 +106,26 @@ export async function evaluateIntents(
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}...` : s);
 
+/** Attach the `guard` rewrite. An update that needs the guard but cannot get it (no runtime to name) is refused. */
+function withGuard(decision: GuardDecision, rewrite: string | undefined, command: string): GuardDecision {
+  if (rewrite) return { ...decision, rewrite };
+  if (!decision.guardRequired || decision.action === "deny") return decision;
+  return { action: "deny", reason: guardRequiredReason(`skill-scanner guard -- sh -c ${shellQuote(command)}`), guardRequired: true };
+}
+
 function isRewritable(i: InstallIntent): boolean {
-  return (
-    i.kind === "skills-cli" || i.kind === "git-clone" || (i.kind === "pi-install" && /^git:|^https?:\/\/|^git@|^ssh:\/\//.test(i.source))
-  );
+  switch (i.kind) {
+    case "skills-cli":
+    case "git-clone":
+    case "git-update":
+    case "pi-update":
+    case "plugin-update":
+      return true;
+    case "pi-install":
+      return /^git:|^https?:\/\/|^git@|^ssh:\/\//.test(i.source);
+    default:
+      return false;
+  }
 }
 
 function describeIntents(intents: readonly InstallIntent[]): string {
@@ -119,8 +139,14 @@ function describeIntents(intents: readonly InstallIntent[]): string {
     case "codex-skill-installer":
     case "pi-install":
       return first.source;
+    case "pi-update":
+      return first.source ?? "pi packages";
     case "write-to-skill-dir":
       return first.dest;
+    case "git-update":
+      return first.dir;
+    case "plugin-update":
+      return first.target ?? `${first.harness} plugins`;
     default:
       return first.target;
   }
@@ -133,7 +159,8 @@ async function decideIntent(intent: InstallIntent, ctx: GuardContext, deps: Guar
     scanAndDecide(raw, ctx, deps, trust, onlySkills, skillBundlesOnly);
   switch (intent.kind) {
     case "skills-cli": {
-      if (!intent.source || !ADD_SUBCOMMANDS.has(intent.subcommand)) return ALLOW;
+      // update, check, and the lock-file installs fetch whatever is newest: scanned as they land, under guard.
+      if (!intent.source || !ADD_SUBCOMMANDS.has(intent.subcommand)) return UNDER_GUARD;
       const only = intent.skills.includes("*") || intent.skills.length === 0 ? undefined : intent.skills;
       // The skills CLI copies skill directories only, so the rest of the repository does not gate it.
       return scan(intent.source, only, true);
@@ -145,9 +172,17 @@ async function decideIntent(intent: InstallIntent, ctx: GuardContext, deps: Guar
     case "claude-plugin":
       return intent.action === "marketplace-add" ? scan(intent.target) : claudePluginInstall(intent.target, ctx, deps, trust);
     case "codex-plugin":
-      return intent.action === "marketplace-add" ? scan(intent.target) : ALLOW;
+      return intent.action === "marketplace-add"
+        ? scan(intent.target)
+        : codexPluginAdd(intent.target, intent.marketplace, ctx, deps, trust);
     case "pi-install":
       return scan(intent.source);
+    case "pi-update":
+      // npm packages run their install scripts during the update: scan the versions it would install first.
+      return mostSevere([UNDER_GUARD, ...(await sequential(await piNpmUpdates(intent.source, ctx.cwd, ctx.env), (s) => scan(s)))]);
+    case "git-update":
+    case "plugin-update":
+      return UNDER_GUARD;
     default:
       // opencode plugins and plain writes into skill directories are checked right after they happen.
       return ALLOW;
@@ -217,7 +252,7 @@ export function errorDecision(ctx: Pick<GuardContext, "config">, source: string,
 
 const RANK: Readonly<Record<GuardAction, number>> = { allow: 0, ask: 1, deny: 2 };
 
-/** The most severe action wins; reasons of every decision at that level are kept. */
+/** The most severe action wins; reasons of every decision at that level are kept, and any need for the guard. */
 export function mostSevere(decisions: readonly GuardDecision[]): GuardDecision {
   if (decisions.length === 0) return ALLOW;
   const top = Math.max(...decisions.map((d) => RANK[d.action]));
@@ -227,7 +262,8 @@ export function mostSevere(decisions: readonly GuardDecision[]): GuardDecision {
     .map((d) => d.reason)
     .filter(Boolean)
     .join("\n\n");
-  return { ...first, reason };
+  const guardRequired = decisions.some((d) => d.guardRequired);
+  return { ...first, reason, ...(guardRequired ? { guardRequired } : {}) };
 }
 
 /**
@@ -259,6 +295,35 @@ async function claudePluginInstall(target: string, ctx: GuardContext, deps: Guar
     }
   }
   return ALLOW;
+}
+
+/**
+ * `codex plugin add <plugin>@<marketplace>`: Codex copies a local plugin from the marketplace, and
+ * clones or packs a git or npm one at install time. Scan the directory, or fetch and scan the same
+ * source. What cannot be resolved is left to the session-start audit.
+ */
+async function codexPluginAdd(
+  target: string,
+  marketplace: string | undefined,
+  ctx: GuardContext,
+  deps: GuardDeps,
+  trust: TrustStore,
+): Promise<GuardDecision> {
+  const source = await codexPluginSource(target, marketplace, ctx.env);
+  if (!source) return ALLOW;
+  if (source.kind === "fetch") return scanAndDecide(source.source, ctx, deps, trust);
+  const scan = deps.scanPath ?? scanPath;
+  try {
+    const report = await scan(source.path, {
+      policy: { blockAt: ctx.config.blockAt, warnAt: ctx.config.warnAt },
+      suppressions: ctx.config.ignore,
+      label: target,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
+    return decideReport(report, target, ctx, trust);
+  } catch (e) {
+    return errorDecision(ctx, target, errorMessage(e));
+  }
 }
 
 async function relativePluginSource(marketDir: string, plugin: string): Promise<string | undefined> {

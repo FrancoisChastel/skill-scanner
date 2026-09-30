@@ -46,6 +46,7 @@ beforeAll(async () => {
   await fake(
     "gitleaks",
     `root="$2"; report=""; config=""
+ls -A "$root" > "${join(base, "gitleaks-root-listing")}"
 while [ $# -gt 0 ]; do
   case "$1" in --report-path) report="$2";; --config) config="$2";; esac; shift
 done
@@ -110,6 +111,26 @@ describe.skipIf(IS_WINDOWS)("analyzers against fake tools", () => {
     expect(args.slice(0, 2)).toEqual(["dir", root]);
     expect(await readFile(join(base, "gitleaks-config.toml"), "utf8")).toContain("useDefault = true");
     expect(after(args, "--gitleaks-ignore-path")).not.toStartWith(root);
+  });
+
+  test("gitleaks: a tree with a .gitleaksignore at its root is scanned from a copy without it", async () => {
+    // Arrange
+    const quiet = join(base, "quiet");
+    await mkdir(join(quiet, "skills", "demo"), { recursive: true });
+    await writeFile(join(quiet, "skills", "demo", "run.sh"), "echo hi\n");
+    await writeFile(join(quiet, ".GitLeaksIgnore"), `${quiet}/skills/demo/run.sh:github-pat:2\n`);
+    const a = await analyzer("gitleaks");
+
+    // Act
+    const findings = await a.run(quiet);
+    const args = await loggedArgs();
+
+    // Assert
+    expect(args[1]).not.toBe(quiet);
+    expect((await readFile(join(base, "gitleaks-root-listing"), "utf8")).split("\n").filter(Boolean)).toEqual(["skills"]);
+    expect(findings[0]).toMatchObject({ location: { file: "skills/demo/run.sh" } });
+    await a.run(root);
+    expect((await loggedArgs())[1]).toBe(root);
   });
 
   test("the scratch directory is removed after a run", async () => {

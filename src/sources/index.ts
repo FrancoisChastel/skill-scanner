@@ -3,7 +3,7 @@
  * `pi install`, and Codex's skill-installer name them.
  */
 import type { ScanReport } from "../core/types";
-import { type ScanOptions, scanPath } from "../scan";
+import { type ScanOptions, scanPath, type TargetScanner } from "../scan";
 import { fetchSource } from "./fetch";
 import { parseSource } from "./parse";
 import { onlySkillBundles, restrictToSkills } from "./select";
@@ -29,6 +29,7 @@ export {
 } from "./guard-env";
 export { parseSource } from "./parse";
 export { runPostCheckout } from "./post-checkout";
+export { runRefTransaction } from "./ref-transaction";
 export { onlySkillBundles, restrictToSkills, scanGaps } from "./select";
 export type { FetchedSource, FetchOptions, SourceKind, SourceSpec } from "./types";
 export { cloneUrlVariants } from "./urls";
@@ -50,6 +51,8 @@ export interface SourceScan {
 export interface InstallScope {
   /** Gate only on skill directories, as `npx skills` copies nothing else. */
   readonly skillBundlesOnly?: boolean;
+  /** What scans the fetched copy. Default `scanPath`; hooks pass an isolated (worker) scanner. */
+  readonly scanner?: TargetScanner;
 }
 
 export type SourceScanOptions = ScanOptions & FetchOptions & InstallScope & { readonly cwd: string; readonly keep?: boolean };
@@ -84,8 +87,8 @@ export async function scanSource(raw: string, opts: SourceScanOptions): Promise<
  */
 export async function scanFetched(fetched: FetchedSource, opts: ScanOptions & InstallScope = {}): Promise<ScanReport> {
   const onlySkills = unionSkills(fetched.spec.skills, opts.onlySkills);
-  const { onlySkills: _ignored, skillBundlesOnly, ...rest } = opts;
-  const report = await scanPath(fetched.dir, { ...rest, label: opts.label ?? fetched.spec.display });
+  const { onlySkills: _ignored, skillBundlesOnly, scanner = scanPath, ...rest } = opts;
+  const report = await scanner(fetched.dir, { ...rest, label: opts.label ?? fetched.spec.display });
   const selected = onlySkills ? restrictToSkills(report, onlySkills) : report;
   return skillBundlesOnly ? onlySkillBundles(selected) : selected;
 }

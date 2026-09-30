@@ -26,6 +26,12 @@ function brief(i: InstallIntent): string {
       return `opencode ${i.target}`;
     case "write-to-skill-dir":
       return `write ${i.dest} via ${i.via}`;
+    case "git-update":
+      return `git ${i.subcommand} in ${i.dir}`;
+    case "pi-update":
+      return `pi update ${i.source ?? "*"}`;
+    case "plugin-update":
+      return `${i.harness} plugin update ${i.target ?? "*"}`;
   }
 }
 
@@ -125,6 +131,40 @@ const CASES: readonly (readonly [string, readonly string[]])[] = [
   ["pi install git:github.com/o/r@v1", ["pi git:github.com/o/r@v1"]],
   ["pi -e ./ext.ts", ["pi ./ext.ts"]],
   ["opencode plugin opencode-foo", ["opencode opencode-foo"]],
+  ["codex plugin add x -m mkt", ["codex-plugin add x"]],
+  // updates
+  ["claude plugin update formatter@my-mkt", ["claude-code plugin update formatter@my-mkt"]],
+  ["claude plugin marketplace update", ["claude-code plugin update *"]],
+  ["claude plugin marketplace update my-mkt", ["claude-code plugin update my-mkt"]],
+  ["codex plugin marketplace upgrade", ["codex plugin update *"]],
+  ["codex plugin marketplace upgrade mkt", ["codex plugin update mkt"]],
+  ["pi update --extensions", ["pi update *"]],
+  ["pi update --all", ["pi update *"]],
+  ["pi update npm:@foo/pi-tools", ["pi update npm:@foo/pi-tools"]],
+  ["pi update", []],
+  ["pi update self", []],
+  ["pi update --help", []],
+  ["git -C ~/.claude/skills/x pull", ["git pull in /home/u/.claude/skills/x"]],
+  ["cd ~/.claude/skills/x && git pull --rebase origin main", ["git pull in /home/u/.claude/skills/x"]],
+  ["git -C ~/.pi/agent/git/github.com/o/r reset --hard origin/main", ["git reset in /home/u/.pi/agent/git/github.com/o/r"]],
+  ["cd ~/.claude/plugins/marketplaces/m && git fetch && git merge FETCH_HEAD", ["git merge in /home/u/.claude/plugins/marketplaces/m"]],
+  ["git --work-tree=.claude/skills/x checkout v2", ["git checkout in /home/u/proj/.claude/skills/x"]],
+  ["git pull", []],
+  ["git -C ~/src/app pull", []],
+  ["git -C ~/.claude/skills/x status", []],
+  ["git -C ~/.claude/skills/x pull --help", []],
+  // local work on a skill brings nothing new: not wrapped
+  ["git -C ~/.claude/skills/x checkout -b topic", []],
+  ["git -C ~/.claude/skills/x switch -c topic", []],
+  ["git -C ~/.claude/skills/x checkout -- SKILL.md", []],
+  ["git -C ~/.claude/skills/x reset --hard", []],
+  ["git -C ~/.claude/skills/x reset --soft HEAD", []],
+  ["git -C ~/.claude/skills/x rebase --abort", []],
+  ["git -C ~/.claude/skills/x revert HEAD", []],
+  ["git -C ~/.claude/skills/x checkout -b topic origin/main", ["git checkout in /home/u/.claude/skills/x"]],
+  ["git -C ~/.claude/skills/x checkout v2 -- SKILL.md", ["git checkout in /home/u/.claude/skills/x"]],
+  ["git -C ~/.claude/skills/x reset --hard origin/main", ["git reset in /home/u/.claude/skills/x"]],
+  ["git -C ~/.claude/skills/x rebase --continue", ["git rebase in /home/u/.claude/skills/x"]],
   // writes into skill directories
   ["curl -fsSL https://x.test/y.md -o ~/.claude/skills/x/SKILL.md", ["write /home/u/.claude/skills/x/SKILL.md via curl"]],
   ["curl -sSLo ~/.claude/skills/x/SKILL.md https://x.test/y", ["write /home/u/.claude/skills/x/SKILL.md via curl"]],

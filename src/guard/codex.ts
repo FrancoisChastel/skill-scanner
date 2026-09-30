@@ -17,7 +17,7 @@ import {
   shellDecision,
   str,
 } from "./hook-common";
-import { flaggedContext, flaggedReason, flaggedSystemMessage } from "./messages";
+import { flaggedContext, flaggedReason, flaggedSystemMessage, guardRequiredReason } from "./messages";
 import { type ReconcileResult, reconcileAfterChange } from "./reconcile";
 import { commandWords, parseShell, programName } from "./shell";
 import { resolvePath } from "./shellpath";
@@ -71,11 +71,16 @@ async function preToolUse(p: Payload, ctx: GuardContext, deps: HandlerDeps): Pro
 }
 
 export function codexPreOutput(decision: GuardDecision | undefined): HookResult {
-  if (!decision || decision.action === "allow") return PASS;
+  if (!decision) return PASS;
+  // Codex cannot swap in the guarded command, so an update that needs the guard is refused with it.
+  const guarded = decision.guardRequired && decision.rewrite && decision.action !== "deny" ? guardRequiredReason(decision.rewrite) : "";
+  if (decision.action === "allow" && !guarded) return PASS;
   const reason =
     decision.action === "ask"
-      ? `${decision.reason}\nCodex hooks cannot ask the user, so this was refused. Ask the user whether to go ahead; if they agree, they can approve it with \`skill-scanner trust\` (or run the command themselves) and ask you to retry.`
-      : decision.reason;
+      ? `${decision.reason}\nCodex hooks cannot ask the user, so this was refused. Ask the user whether to go ahead; if they agree, they can approve it with \`skill-scanner trust\` (or run the command themselves) and ask you to retry.${guarded ? `\n${guarded}` : ""}`
+      : decision.action === "allow"
+        ? guarded
+        : decision.reason;
   return jsonResult({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } });
 }
 
