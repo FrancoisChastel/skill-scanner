@@ -1,0 +1,64 @@
+{
+  "description": "skill-scanner: scan skills before Claude Code installs or runs them. Needs `npm install -g @french-castle/skill-scanner`.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook claude-code",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook claude-code",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook claude-code",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "matcher": "skills",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook claude-code",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "UserPromptExpansion": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook claude-code",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/FrancoisChastel/skill-scanner/main/schema/config.schema.json",
+  "title": "skill-scanner configuration",
+  "description": "~/.skill-scanner/config.json, or a file passed with --config. skill-scanner never reads configuration from the directory it scans.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "blockAt": {
+      "description": "Block when any finding's effective severity reaches this. Low-confidence findings count one level lower.",
+      "$ref": "#/$defs/severity",
+      "default": "high"
+    },
+    "warnAt": {
+      "description": "Warn when any finding's effective severity reaches this.",
+      "$ref": "#/$defs/severity",
+      "default": "medium"
+    },
+    "ignore": {
+      "description": "Findings to suppress before the verdict.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule"],
+        "properties": {
+          "rule": { "description": "A rule id such as exec/download-and-run, a category wildcard such as network/*, or *.", "type": "string", "minLength": 1 },
+          "path": { "description": "Glob over finding paths (*, **, ?). Omit for every path.", "type": "string" },
+          "digest": { "description": "Only for this exact skill content, as shown in reports.", "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "reason": { "description": "Why this is suppressed, for the next reader.", "type": "string" }
+        }
+      }
+    },
+    "judge": {
+      "description": "The optional jev judge. Off unless enabled here or with --judge; it sends redacted skill text to the provider.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "provider": { "enum": ["typesafe", "openrouter", "vercel"], "description": "Force a provider. By default the key's prefix decides." },
+        "model": { "type": "string", "description": "Override the provider's default jev model id." },
+        "baseUrl": { "type": "string", "description": "HTTPS endpoint override; plain HTTP only for localhost." },
+        "timeoutMs": { "type": "integer", "minimum": 1, "default": 15000 }
+      }
+    },
+    "analyzers": {
+      "description": "External open-source analyzers to run when installed. All off by default.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "skillspector": { "type": "boolean", "default": false },
+        "cisco": { "type": "boolean", "default": false },
+        "gitleaks": { "type": "boolean", "default": false },
+        "osv-scanner": { "type": "boolean", "default": false },
+        "semgrep": { "type": "boolean", "default": false }
+      }
+    },
+    "semgrepConfig": {
+      "description": "Semgrep or opengrep --config value. A local path keeps the scan offline; a registry ruleset such as p/default uses the network.",
+      "type": "string"
+    },
+    "hooks": {
+      "description": "How harness hooks and plugins act on install scans.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "onWarn": { "$ref": "#/$defs/policy", "default": "ask", "description": "When an install scans as warn." },
+        "onError": { "$ref": "#/$defs/policy", "default": "ask", "description": "When the scan itself fails, for example a network error while fetching the source." },
+        "quarantine": { "type": "boolean", "default": true, "description": "Move skills found blocked after install to ~/.skill-scanner/quarantine." }
+      }
+    }
+  },
+  "$defs": {
+    "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+    "policy": { "enum": ["ask", "allow", "deny"] }
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "name": "@french-castle/skill-scanner",
+  "version": "0.1.0",
+  "description": "Scan Agent Skills for prompt injection, hidden instructions, exfiltration, and remote code before Claude Code, Codex, OpenCode, Pi, or npx skills installs them. Standalone and offline by default; TypeSafe's jev is an optional second opinion.",
+  "keywords": [
+    "agent-skills",
+    "skills",
+    "security",
+    "scanner",
+    "prompt-injection",
+    "supply-chain",
+    "claude-code",
+    "codex",
+    "opencode",
+    "pi",
+    "pi-package",
+    "npx-skills",
+    "sarif",
+    "jev",
+    "typesafe"
+  ],
+  "homepage": "https://github.com/FrancoisChastel/skill-scanner#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FrancoisChastel/skill-scanner.git"
+  },
+  "bugs": {
+    "url": "https://github.com/FrancoisChastel/skill-scanner/issues"
+  },
+  "author": "Francois Chastel",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "skill-scanner": "dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./opencode": {
+      "types": "./dist/adapters/opencode.d.ts",
+      "default": "./dist/adapters/opencode.js"
+    },
+    "./pi": {
+      "types": "./dist/adapters/pi.d.ts",
+      "default": "./dist/adapters/pi.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "plugins",
+    "skills",
+    "schema",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "CHANGELOG.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist/adapters/pi.js"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "biome check . && node scripts/check-ascii.mjs",
+    "docs:rules": "bun scripts/gen-rules-doc.ts",
+    "check": "bun run typecheck && bun run lint && bun test && bun run build && node scripts/smoke.mjs",
+    "prepublishOnly": "bun run check"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.83.0",
+    "@opencode-ai/plugin": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@opencode-ai/plugin": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "@earendil-works/pi-coding-agent": "^0.87.1",
+    "@opencode-ai/plugin": "^1.18.32",
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "description": "skill-scanner: scan skills before Codex installs or runs them. Needs `npm install -g @french-castle/skill-scanner`.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook codex",
+            "timeout": 60,
+            "statusMessage": "skill-scanner: checking skills"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|shell|exec_command|apply_patch)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook codex",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Bash|shell|exec_command|apply_patch)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook codex",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "skill-scanner hook codex",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

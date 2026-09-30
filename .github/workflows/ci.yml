@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck, lint, test, build, smoke, self-scan (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - name: scanner passes its own source and build
+        run: node scripts/self-scan.mjs
+      - name: rules reference is up to date
+        run: bun scripts/gen-rules-doc.ts --check
+      - name: pack and install the tarball under Node
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --silent
+          mkdir -p "$RUNNER_TEMP/pkgtest" && cd "$RUNNER_TEMP/pkgtest"
+          npm init -y >/dev/null
+          npm install --silent "$GITHUB_WORKSPACE"/french-castle-skill-scanner-*.tgz
+          node -e "import('@french-castle/skill-scanner').then(m => { if (typeof m.scanPath !== 'function') throw new Error('scanPath export missing'); })"
+          npx skill-scanner --version
+          mkdir -p clean-skill && printf -- '---\nname: clean-skill\ndescription: Formats dates.\n---\nFormat dates as ISO 8601.\n' > clean-skill/SKILL.md
+          npx skill-scanner scan clean-skill
+      - name: type-check a NodeNext consumer against the packed declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/pkgtest"
+          npm install --silent typescript@5 @types/node@22
+          printf '%s\n' '{"compilerOptions":{"module":"NodeNext","moduleResolution":"NodeNext","target":"ES2022","strict":true,"noEmit":true,"types":["node"]},"include":["consumer.mts"]}' > tsconfig.json
+          cat > consumer.mts <<'TS'
+          import { scanPath, type Finding, type ScanReport } from "@french-castle/skill-scanner";
+          const report: ScanReport = await scanPath(".");
+          const findings: Finding[] = report.bundles.flatMap((b) => b.findings);
+          // @ts-expect-error the verdict is a string union; this fails if the types collapse to any
+          const wrong: number = report.verdict;
+          console.log(findings.length, wrong);
+          TS
+          npx tsc -p .

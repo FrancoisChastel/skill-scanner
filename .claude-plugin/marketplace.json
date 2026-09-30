@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "skill-scanner",
+  "owner": { "name": "Francois Chastel", "url": "https://github.com/FrancoisChastel" },
+  "description": "skill-scanner: scan Agent Skills before your coding agent installs or runs them",
+  "plugins": [
+    {
+      "name": "skill-scanner",
+      "source": "./plugins/claude-code",
+      "description": "Hooks that scan skills before Claude Code installs them, block flagged skills at use time, and audit installed skills at session start",
+      "category": "security",
+      "tags": ["security", "skills", "scanner", "prompt-injection", "supply-chain"]
+    }
+  ]
+}

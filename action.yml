@@ -1,0 +1,45 @@
+name: skill-scanner
+description: Scan Agent Skills (SKILL.md directories) for prompt injection, hidden instructions, exfiltration, and remote code, and upload the results to GitHub code scanning.
+author: Francois Chastel
+branding:
+  icon: shield
+  color: gray-dark
+
+inputs:
+  path:
+    description: Directory to scan.
+    default: "."
+  fail-on:
+    description: Fail the step at this verdict (block, warn, or never).
+    default: block
+  version:
+    description: skill-scanner version to run from npm.
+    default: "0.1.0"
+  sarif:
+    description: Where to write the SARIF report. Upload it with github/codeql-action/upload-sarif.
+    default: skill-scanner.sarif
+
+outputs:
+  sarif:
+    description: Path of the SARIF report.
+    value: ${{ inputs.sarif }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - name: Scan skills
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        SARIF: ${{ inputs.sarif }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        status=0
+        npx --yes "@french-castle/skill-scanner@${VERSION}" scan "$SCAN_PATH" --format sarif --output "$SARIF" --fail-on "$FAIL_ON" || status=$?
+        npx --yes "@french-castle/skill-scanner@${VERSION}" scan "$SCAN_PATH" --format markdown --fail-on never >> "$GITHUB_STEP_SUMMARY" || true
+        exit "$status"

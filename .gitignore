@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.bun/
+*.log
+*.tgz
+.DS_Store
+.env
+.env.*
+!.env.example
+.claude/worktrees/
