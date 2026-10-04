@@ -55,8 +55,8 @@ LABELS = {
     "jev+skillspector": "rules + jev + SkillSpector",
     "jev+all": "everything",
 }
-# The two configurations a user gets by default: without a jev key, and with one.
-TAGS = {"gitleaks": "default, no key", "jev+gitleaks": "default with a jev key"}
+# The two configurations a user gets by default: without jev, and with it.
+TAGS = {"gitleaks": "default without jev", "jev+gitleaks": "default with jev"}
 
 INK = "#16181d"
 MUTED = "#6b7280"
@@ -385,8 +385,8 @@ def scatter_figure(arms: dict[str, dict], out: str, only: list[str] | None, note
 
 # (arm, label, family): skill-scanner's own configurations in green, the judge's in teal, other tools in grey.
 VALUE = [
-    ("gitleaks", "skill-scanner, no key", "ours"),
-    ("jev+gitleaks", "skill-scanner with a jev key", "jev"),
+    ("gitleaks", "skill-scanner", "ours"),
+    ("jev+gitleaks", "skill-scanner with jev", "jev"),
     ("jev-only", "jev alone", "jev"),
     ("cisco-only", "Cisco skill-scanner alone", "other"),
     ("skillspector-only", "NVIDIA SkillSpector alone", "other"),
@@ -415,7 +415,7 @@ def value_figure(arms: dict[str, dict], out: str, note: str | None) -> None:
     pts = {a: point(arms[a]) for a, _, _ in shown}
     p0 = next(iter(pts.values()))
     s, j = pts.get("gitleaks"), pts.get("jev+gitleaks")
-    title = (f"With a jev key, skill-scanner catches {pct(j.flagged)} of malicious skills it never saw, with fewer false alarms than without"
+    title = (f"With jev, skill-scanner catches {pct(j.flagged)} of malicious skills it never saw, with fewer false alarms than without"
              if s and j and j.fp_flagged <= s.fp_flagged else "What each approach catches, and what it costs")
     top = header(fig, 6.4, title, note or f"{p0.positives:,} malicious and {p0.negatives:,} benign skills, each scanned on its own.")
     gs = fig.add_gridspec(1, 2, width_ratios=[1.35, 1], wspace=0.34, left=0.06, right=0.985, top=top, bottom=0.13)
@@ -444,7 +444,7 @@ def value_figure(arms: dict[str, dict], out: str, note: str | None) -> None:
         ax.annotate("", xy=(j.fp_flagged * 100, j.flagged * 100 - 2.4), xytext=(s.fp_flagged * 100, s.flagged * 100 + 2.4),
                     arrowprops={"arrowstyle": "-|>", "color": "#0f766e", "linewidth": 1.6, "mutation_scale": 14}, zorder=4)
         mid = (s.flagged + j.flagged) / 2 * 100
-        ax.annotate(f"adding a jev key: {(j.flagged - s.flagged) * 100:+.0f} points caught,\n{(j.fp_flagged - s.fp_flagged) * 100:+.1f} points of false alarms",
+        ax.annotate(f"adding jev: {(j.flagged - s.flagged) * 100:+.0f} points caught,\n{(j.fp_flagged - s.fp_flagged) * 100:+.1f} points of false alarms",
                     (max(s.fp_flagged, j.fp_flagged) * 100, mid), xytext=(12, 0), textcoords="offset points", ha="left", va="center",
                     fontsize=8.6, color="#0f766e", fontweight="bold")
     ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:.0f}%"))
@@ -544,7 +544,7 @@ def main() -> None:
     style = opts.get("--style", "table")
     if len(argv) != 2 or style not in ("table", "scatter", "tuning", "value"):
         sys.exit(__doc__)
-    plt.rcParams["font.family"] = ["DejaVu Sans", "sans-serif"]
+    plt.rcParams["font.family"] = ["IBM Plex Sans", "DejaVu Sans", "sans-serif"]
     if "--timing" in opts:
         TIMING.update({k: sum(r["ms"] for r in a["rows"]) / max(1, len(a["rows"])) for k, a in load(opts["--timing"]).items()})
     arms = load(argv[0])

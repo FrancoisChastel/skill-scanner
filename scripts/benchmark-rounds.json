@@ -1,0 +1,79 @@
+{
+  "_source": "docs/benchmark.md, Tuning. Malicious skills flagged and benign skills flagged, in percent, per round of the skill-factory loop, all at the judge's 96,000-character budget. jev rounds come from scripts/judge-lab-score.ts on cached answers; 'released' rows are the measured runs.",
+  "jev": [
+    {
+      "round": "Released questions",
+      "detail": "8 capability questions",
+      "train": [19.0, 1.5],
+      "val": [29.0, 1.3],
+      "test": [21.6, 2.1],
+      "heldOut": [30.7, 2.6]
+    },
+    {
+      "round": "Round 1",
+      "detail": "intent questions",
+      "train": [70.7, 1.0],
+      "val": [73.1, 1.3]
+    },
+    {
+      "round": "Round 2",
+      "detail": "ensemble score",
+      "train": [78.8, 0.3],
+      "val": [79.6, 0.6]
+    },
+    {
+      "round": "Tuned",
+      "detail": "as released",
+      "train": [77.7, 0.4],
+      "val": [80.6, 0.4],
+      "test": [73.2, 0.5],
+      "heldOut": [69.9, 0.7]
+    }
+  ],
+  "rules": [
+    {
+      "round": "Released rules",
+      "train": [44.0, 8.6],
+      "val": [54.8, 8.1],
+      "test": [51.5, 6.6],
+      "heldOut": [32.0, 14.5],
+      "kept": true
+    },
+    {
+      "round": "Round 1",
+      "detail": "hidden content in deliverables",
+      "train": [48.9, 8.6],
+      "val": [55.9, 8.1],
+      "kept": true
+    },
+    {
+      "round": "Round 2",
+      "detail": "anti-forensics wording",
+      "train": [50.0, 8.7],
+      "val": [55.9, 8.1],
+      "kept": false
+    },
+    {
+      "round": "Round 3",
+      "detail": "files hidden from the user",
+      "train": [50.0, 8.6],
+      "val": [57.0, 8.1],
+      "kept": true
+    },
+    {
+      "round": "Round 4",
+      "detail": "stripped audit trails",
+      "train": [51.6, 8.6],
+      "val": [57.0, 8.1],
+      "kept": false
+    },
+    {
+      "round": "Tuned",
+      "train": [50.0, 8.6],
+      "val": [57.0, 8.1],
+      "test": [52.6, 6.6],
+      "heldOut": [32.0, 14.5],
+      "kept": true
+    }
+  ]
+}

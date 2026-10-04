@@ -10,22 +10,26 @@ Scan Agent Skills before your coding agent installs them.
 
 A skill is a folder of instructions and scripts that your agent follows with your permissions. skill-scanner reads a skill without running it and reports what it could do to you: instructions that override the agent or hide things from you, invisible text, commands that download and run code, credential reads that reach the network, persistence in your shell or agent configuration, and code that runs on install or on load. It sits in the install paths of Claude Code, Codex, OpenCode, Pi, and `npx skills`, so a skill is checked whether you install it or your agent does.
 
-- **Standalone.** No runtime dependencies, no account, no key needed. Nothing leaves your machine unless you give it a jev key or scan a remote source (fetched with your own git or npm, exactly as the install would).
+- **Standalone.** No runtime dependencies, no account, no key needed. Nothing leaves your machine unless you turn on jev or scan a remote source (fetched with your own git or npm, exactly as the install would).
 - **In the install path.** Hooks and plugins for all four harnesses, a drop-in for `npx skills add`, and a git backstop that scans every checkout an installer makes.
 - **Evidence, not scores.** Each finding names a rule, a file and line, the text that triggered it, and for hidden or encoded content, what was hidden. Secrets are redacted everywhere.
-- **Second opinions on by default.** With a key, TypeSafe's jev reads what a skill is trying to do, not only what it contains, and doubles what is caught; gitleaks runs whenever it is installed. Without them, nothing breaks: the rules scan offline. NVIDIA SkillSpector, Cisco's skill-scanner, osv-scanner, and semgrep run alongside when you turn them on.
+- **Second opinions on by default.** TypeSafe's jev reads what a skill is trying to do, not only what it contains, and doubles what is caught; gitleaks runs whenever it is installed. Without them, nothing breaks: the rules scan offline. NVIDIA SkillSpector, Cisco's skill-scanner, osv-scanner, and semgrep run alongside when you turn them on.
 
 ## How well it works
 
-![With a jev key, skill-scanner catches 79% of malicious skills it never saw, with fewer false alarms than without one; other scanners catch less or flag far more, and take about three times as long](./docs/benchmark-value.png)
+![skill-scanner with jev catches 79% of malicious agent skills: 0.35% of harmless skills blocked, 10.1% flagged, $0.28 per 1,000 skills; compared with skill-scanner alone, Cisco's skill-scanner, and NVIDIA SkillSpector](./docs/benchmark-summary.png)
 
 On 250 malicious and 851 harmless skills that played no part in tuning:
 
-- **With a jev key**, skill-scanner (rules + gitleaks + jev, its default once a key is set) flags 79% of the malicious skills, and flags fewer harmless ones than without a key (10.1% against 10.7%). It wrongly blocks 3 harmless skills in 851, takes 0.65 s a skill, and costs $0.28 per 1,000 skills.
-- **Without a key**, the rules and gitleaks flag 42% offline, in 0.17 s a skill, with the same 3 false blocks.
+- **With jev**, skill-scanner (rules + gitleaks + jev, its default once jev has an API key) flags 79% of the malicious skills, and flags fewer harmless ones than without jev (10.1% against 10.7%). It wrongly blocks 3 harmless skills in 851, takes 0.65 s a skill, and costs $0.28 per 1,000 skills.
+- **Without jev**, the rules and gitleaks flag 42% offline, in 0.17 s a skill, with the same 3 false blocks.
 - **Other scanners** catch 41% (Cisco's) to 77% (NVIDIA's SkillSpector) on their own, but flag 10% to 46% of harmless skills and take about 2 s a skill. skill-scanner can run them alongside when you want a second look.
 
-How it was measured, every table, and how the rules and the judge's questions were tuned without touching the test data: [docs/benchmark.md](./docs/benchmark.md).
+jev's questions were tuned with [skill-factory](https://github.com/FrancoisChastel/skill-factory)'s loop: read the training misses, rewrite, and keep a change only if it beats a separate validation set. It took jev alone from 29% to 81% of malicious skills caught on validation, and the gain held on test skills and on whole collections the tuning never read:
+
+![skill-factory's loop took jev from 29% to 81% of malicious skills caught; the rules moved from 55% to 57%](./docs/benchmark-evolution.png)
+
+How it was measured, every table, and the full tuning log: [docs/benchmark.md](./docs/benchmark.md).
 
 ## Quick start
 
@@ -127,11 +131,11 @@ A skill blocks when any finding reaches high severity (low-confidence findings c
 
 ## Choosing a configuration
 
-The defaults are the first two rows: nothing to configure beyond setting a key.
+The defaults are the first two rows: skill-scanner on its own, and skill-scanner with jev.
 
-![Rules + gitleaks, rules + gitleaks + jev, rules only, jev alone, and the external tools: malicious skills caught, harmless skills wrongly flagged, and time and cost per skill](./docs/benchmark-readme.png)
+![skill-scanner with and without jev, its rules alone, jev alone, and the external tools: malicious skills caught, harmless skills wrongly flagged, and time and cost per skill](./docs/benchmark-readme.png)
 
-- **Set a jev key.** It roughly doubles what is caught (79% against 42%) with fewer false alarms, for about $0.28 per 1,000 skills; the judge only warns, so what is blocked stays the rules' decision.
+- **Turn on jev.** It roughly doubles what is caught (79% against 42%) with fewer false alarms, for about $0.28 per 1,000 skills; the judge only warns, so what is blocked stays the rules' decision.
 - **Install gitleaks.** It catches keys and tokens left in skills; it adds almost nothing against malicious skills, and almost no false alarms.
 - **Turn on SkillSpector or Cisco's scanner to review, not to gate.** With all three offline tools skill-scanner catches 86% of malicious skills, but flags half of the harmless ones and blocks a third of them.
 
@@ -228,7 +232,7 @@ The action writes SARIF for GitHub code scanning, a Markdown summary on the job 
 ```ts
 import { scanSkill } from "@french-castle/skill-scanner";
 
-// The CLI's defaults: your config, the rules, gitleaks when installed, and jev when a jev key is set.
+// The CLI's defaults: your config, the rules, gitleaks when installed, and jev when its API key is set.
 const report = await scanSkill("./my-skill");
 if (report.verdict === "block") console.error(report.bundles.flatMap((b) => b.findings));
 ```

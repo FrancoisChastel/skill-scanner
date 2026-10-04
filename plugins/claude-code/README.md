@@ -32,7 +32,7 @@ Restart Claude Code, then check with `skill-scanner doctor`. Do not also run `sk
 | `ConfigChange` | skills | Rescans when skill files change during a session |
 | `UserPromptExpansion` | all | Blocks `/name` for a flagged skill |
 
-A blocked install is denied with the findings; a warning asks you. Nothing is sent over the network unless you set a jev key (`TYPESAFE_API_KEY`), which turns on the judge: it reads what a skill is trying to do and flags about twice as many malicious skills, and never blocks on its own. Approve a skill you reviewed with `skill-scanner trust <path>`.
+A blocked install is denied with the findings; a warning asks you. Nothing is sent over the network unless you turn on jev (set `TYPESAFE_API_KEY`): it reads what a skill is trying to do and flags about twice as many malicious skills, and never blocks on its own. Approve a skill you reviewed with `skill-scanner trust <path>`.
 
 ## Remove
 

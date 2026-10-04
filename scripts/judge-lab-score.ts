@@ -18,6 +18,7 @@
  * --questions        also print each question's separation (AUC) and recall at a 1% and 2% false-flag rate, per split
  * --failures <split> list jev-alone misses and false flags in that split, with every question's P(true)
  * --arm <out.json>   also write jev alone as a benchmark arm file (verdicts only), for the report and the figure;
+ * --arm-judged <out.json>  and the rules with the judge replayed on them (static + jev);
  *                    --root <lab root> and --as-root <results root> map the lab's paths to the results' (default /corpora)
  */
 import { createHash } from "node:crypto";
@@ -183,12 +184,12 @@ if (args.includes("--questions")) {
   }
 }
 
-const armFile = flag("--arm");
-if (armFile) {
+/** One arm file from per-bundle verdicts, with the lab's paths mapped to the results' root. */
+async function writeArm(file: string, name: string, verdict: (r: LabRow) => Verdict): Promise<void> {
   const labRoot = flag("--root") ?? "/corpora";
   const asRoot = flag("--as-root") ?? "/corpora";
   const arm = {
-    arm: "jev-only",
+    arm: name,
     judge: true,
     analyzers: [],
     totalMs: 0,
@@ -201,16 +202,20 @@ if (armFile) {
       bundle: basename(r.dir),
       root: ".",
       kind: "skill",
-      verdict: jevAlone(r),
+      verdict: verdict(r),
       ms: 0,
       findings: [],
       analyzers: [],
       judgeBytes: 0,
     })),
   };
-  await writeFile(armFile, JSON.stringify(arm, null, 1));
-  console.log(`wrote ${armFile}: ${arm.rows.length} bundles`);
+  await writeFile(file, JSON.stringify(arm, null, 1));
+  console.log(`wrote ${file}: ${arm.rows.length} bundles`);
 }
+const armFile = flag("--arm");
+if (armFile) await writeArm(armFile, "jev-only", jevAlone);
+const judgedFile = flag("--arm-judged");
+if (judgedFile) await writeArm(judgedFile, "jev", withJudge);
 
 const failures = flag("--failures") as Split | undefined;
 if (failures) {

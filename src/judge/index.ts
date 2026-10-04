@@ -35,7 +35,7 @@ export interface JudgeDeps {
 }
 
 /** What `auto` says when there is no jev key; the scan goes on with the rules. */
-export const NO_JEV_KEY = `no jev key: set ${OVERRIDE_KEY_ENV} or TYPESAFE_API_KEY to turn the judge on`;
+export const NO_JEV_KEY = `jev is off: set TYPESAFE_API_KEY (or ${OVERRIDE_KEY_ENV}) to turn it on`;
 
 /** The keys `auto` may use: a jev key, or any key once `provider` names its host. Gateway keys need `enabled: true`. */
 const GENERAL_KEYS = ["OPENROUTER_API_KEY", "AI_GATEWAY_API_KEY"] as const;

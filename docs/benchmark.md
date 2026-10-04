@@ -2,16 +2,22 @@
 
 What each configuration of skill-scanner catches, what it wrongly flags, and what it costs, measured on the same labeled skills: the static rules alone, with TypeSafe's jev judge, the judge alone, each external tool alone and on top of the rules, and their combinations. The rules and the judge's questions were then tuned on part of the data, and every headline number below is on the part tuning never read.
 
-![What each configuration catches, and what it costs, on the 250 malicious and 851 benign skills tuning never read](./benchmark.png)
+![skill-scanner with jev catches 79% of malicious agent skills: the key numbers, and how it compares with skill-scanner alone and with other scanners](./benchmark-summary.png)
 
 ## What to run
 
-skill-scanner's defaults are the two configurations at the top: the rules and gitleaks always, and the jev judge as soon as a jev key is set.
+skill-scanner's defaults are the two configurations at the top: the rules and gitleaks always, and jev as soon as its API key is set.
 
-- **With a jev key (rules + gitleaks + jev), the default once a key is set.** On skills tuning never read it flags 79% of the malicious ones (49% for the rules and the judge before tuning) and wrongly flags 10.1% of the benign ones, fewer than without a key (10.7%). It blocks what the rules block, less three malicious skills the judge's doubts moved to a warning, and wrongly blocks 3 benign skills in 851. It takes 0.65 s a skill and costs $0.28 per 1,000 skills.
-- **Without a key (rules + gitleaks), the default out of the box.** It flags 42% and blocks a third (32.8%) of malicious skills, with the same 3 false blocks, offline, in 0.17 s a skill.
+- **With jev (rules + gitleaks + jev), the default once jev has an API key.** On skills tuning never read it flags 79% of the malicious ones (50% for the rules and the judge before tuning, at the same 96,000-character budget) and wrongly flags 10.1% of the benign ones, fewer than without jev (10.7%). It blocks what the rules block, less three malicious skills the judge's doubts moved to a warning, and wrongly blocks 3 benign skills in 851. It takes 0.65 s a skill and costs $0.28 per 1,000 skills.
+- **Without jev (rules + gitleaks), the default out of the box.** It flags 42% and blocks a third (32.8%) of malicious skills, with the same 3 false blocks, offline, in 0.17 s a skill.
 - **jev alone** is the most precise reader: it flags 71% of malicious skills with 0.6% of benign skills flagged. It never blocks on its own.
 - **The external tools** catch more but flag too much to gate on. SkillSpector alone catches 77% and flags 46% of benign skills; with the rules, 84% and 49%. Cisco's scanner alone catches 41% at 10%. Each takes about 2 s a skill. gitleaks alone catches 2%: these skills do not attack through leaked secrets, and gitleaks is in the defaults for the secrets it does find, not for detection.
+
+![Malicious skills caught, per approach](./benchmark-caught.png)
+
+![Harmless skills wrongly flagged, per approach](./benchmark-false-alarms.png)
+
+![Time and money to scan 1,000 skills, per approach](./benchmark-cost.png)
 
 ## Setup
 
@@ -20,8 +26,8 @@ skill-scanner's defaults are the two configurations at the top: the rules and gi
 | Configuration | What runs | Network | How it is measured |
 |---|---|---|---|
 | `static` | the rules | no | run |
-| `jev+gitleaks` | the rules, gitleaks, and the judge: the default with a jev key | yes (the judge) | run |
-| `gitleaks` | the rules and gitleaks: the default without a key | no | derived from gitleaks' own findings |
+| `jev+gitleaks` | the rules, gitleaks, and jev: the default with jev | yes (the judge) | run |
+| `gitleaks` | the rules and gitleaks: the default without jev | no | derived from gitleaks' own findings |
 | `jev` | the rules and the judge | yes (the judge) | run |
 | `jev-only` | the judge's own `judge/*` findings | yes | derived from `jev`: the judge adds them whatever the rules found |
 | `skillspector-only`, `cisco-only`, `gitleaks-only` | one tool | no | derived from a "rules + tool" run: the tool's `external/<tool>` findings |
@@ -50,6 +56,10 @@ Four held-out bundles were read before the split was fixed, while looking at wha
 ## Results on skills tuning never read
 
 The test split and the held-out corpora: 250 malicious and 851 benign skills, with the released rules and judge. The same configurations before tuning are compared split by split under [Tuning](#tuning).
+
+![Every configuration: malicious skills caught, benign skills wrongly flagged, and time and cost per skill](./benchmark.png)
+
+![Malicious skills caught against benign skills wrongly flagged, and time and money for 1,000 skills](./benchmark-tradeoff.png)
 
 <!-- benchmark:summary-block -->
 ### released configurations: 250 malicious and 851 benign bundles
@@ -203,7 +213,9 @@ Verdict moves on the same bundles, relative to `static`. A bundle is flagged whe
 
 ## Tuning
 
-Both the rules and the judge's questions were tuned the way [skill-factory](https://github.com/FrancoisChastel/skill-factory) tunes a skill: read the training split's failures, propose a general change, score it, and keep it only if it beats the current best on validation. Test and held-out skills were scored once, after both were frozen.
+Both the rules and the judge's questions were tuned the way [skill-factory](https://github.com/FrancoisChastel/skill-factory) tunes a skill: read the training split's failures, propose a general change, score it, and keep it only if it beats the current best on validation. Test and held-out skills were scored once, after both were frozen. Every judge number here is at the 96,000-character budget, before and after alike, so the comparison isolates the questions: at that budget the released questions caught 27% of unseen malicious skills at 2.4% false flags, against 71% at 0.6% after.
+
+![skill-factory's loop took jev from 29% to 81% of malicious skills caught on validation; the rules moved from 55% to 57%](./benchmark-evolution.png)
 
 ![Before and after tuning, on each split](./benchmark-tuning.png)
 
@@ -214,14 +226,14 @@ Both the rules and the judge's questions were tuned the way [skill-factory](http
 | static rules | validation (93 / 467) | 54.8% -> **57.0%** | 49.5% -> **49.5%** | 8.1% -> **8.1%** | 0.2% -> **0.2%** |
 | static rules | test (97 / 423) | 51.5% -> **52.6%** | 44.3% -> **44.3%** | 6.6% -> **6.6%** | 0.2% -> **0.2%** |
 | static rules | held-out corpora (153 / 428) | 32.0% -> **32.0%** | 25.5% -> **25.5%** | 14.5% -> **14.5%** | 0.5% -> **0.5%** |
-| jev alone | training (184 / 922) | 16.3% -> **77.7%** | 0.0% -> **0.0%** | 0.7% -> **0.4%** | 0.0% -> **0.0%** |
-| jev alone | validation (93 / 467) | 24.7% -> **80.6%** | 0.0% -> **0.0%** | 0.4% -> **0.4%** | 0.0% -> **0.0%** |
-| jev alone | test (97 / 423) | 21.6% -> **73.2%** | 0.0% -> **0.0%** | 1.4% -> **0.5%** | 0.0% -> **0.0%** |
-| jev alone | held-out corpora (153 / 428) | 28.1% -> **69.9%** | 0.0% -> **0.0%** | 1.6% -> **0.7%** | 0.0% -> **0.0%** |
-| static rules + jev | training (184 / 922) | 46.2% -> **85.3%** | 36.4% -> **36.4%** | 8.6% -> **8.2%** | 0.2% -> **0.1%** |
-| static rules + jev | validation (93 / 467) | 58.1% -> **87.1%** | 49.5% -> **49.5%** | 8.1% -> **7.9%** | 0.4% -> **0.2%** |
-| static rules + jev | test (97 / 423) | 52.6% -> **80.4%** | 43.3% -> **43.3%** | 8.0% -> **6.9%** | 0.2% -> **0.2%** |
-| static rules + jev | held-out corpora (153 / 428) | 46.4% -> **77.1%** | 24.8% -> **24.2%** | 15.4% -> **13.6%** | 0.5% -> **0.5%** |
+| jev alone | training (184 / 922) | 19.0% -> **77.7%** | 0.0% -> **0.0%** | 1.5% -> **0.4%** | 0.0% -> **0.0%** |
+| jev alone | validation (93 / 467) | 29.0% -> **80.6%** | 0.0% -> **0.0%** | 1.3% -> **0.4%** | 0.0% -> **0.0%** |
+| jev alone | test (97 / 423) | 21.6% -> **73.2%** | 0.0% -> **0.0%** | 2.1% -> **0.5%** | 0.0% -> **0.0%** |
+| jev alone | held-out corpora (153 / 428) | 30.7% -> **69.9%** | 0.0% -> **0.0%** | 2.6% -> **0.7%** | 0.0% -> **0.0%** |
+| static rules + jev | training (184 / 922) | 48.9% -> **85.3%** | 37.0% -> **36.4%** | 8.9% -> **8.2%** | 0.2% -> **0.1%** |
+| static rules + jev | validation (93 / 467) | 62.4% -> **87.1%** | 49.5% -> **49.5%** | 8.8% -> **7.9%** | 0.4% -> **0.2%** |
+| static rules + jev | test (97 / 423) | 52.6% -> **80.4%** | 43.3% -> **43.3%** | 8.7% -> **6.9%** | 0.2% -> **0.2%** |
+| static rules + jev | held-out corpora (153 / 428) | 47.7% -> **77.1%** | 24.2% -> **24.2%** | 15.7% -> **13.6%** | 0.5% -> **0.5%** |
 <!-- /benchmark:tuning -->
 
 The judge's gains hold on skills it never saw: jev alone goes from about a quarter to about three quarters of malicious skills on every split, and its false flags fall. The rules' gains do not carry: two new rules caught 11 more training skills and 2 more validation skills, but one more test skill and no held-out one.
@@ -230,11 +242,14 @@ The judge's gains hold on skills it never saw: jev alone goes from about a quart
 
 `scripts/judge-lab.ts` asks jev any set of questions about every skill of a split, with the exact text the scanner sends, and caches each answer, so a question set can be rescored offline; `scripts/judge-lab-score.ts` replays the judge's rules on the cached answers. Tuning took 30 million input tokens, $1.27 at list price.
 
+All rounds are scored at the 96,000-character budget the released judge uses (`scripts/benchmark-rounds.json`).
+
 | Round | What changed | Why | jev alone, training | jev alone, validation |
 |---|---|---|---|---|
-| 0 | the eight capability probes, four of them adding a finding at P >= 0.85 | the released judge | 16.3% at 0.7% false flags | 24.7% at 0.4% |
-| 1 | fifteen intent questions, each under two framings | the training misses were skills that steer the agent to a planted file, claim another skill is deprecated, or game a grader: intent, not capability | 77.2% at 1.0% | 76.3% at 0.6% |
-| 2 | budget 24,000 to 96,000 characters; a fake-prerequisite question; an ensemble score | 26 of the 42 remaining training misses were never sent (too long); the rest were "install this tool from a vercel.app link first" | 78.8% at 0.3% | 79.6% at 0.6% |
+| 0 | the eight capability probes, four of them adding a finding at P >= 0.85 | the released judge | 19.0% at 1.5% false flags | 29.0% at 1.3% |
+| 1 | fifteen intent questions, each under two framings; the best pair kept | the training misses were skills that steer the agent to a planted file, claim another skill is deprecated, or game a grader: intent, not capability | 70.7% at 1.0% | 73.1% at 1.3% |
+| 2 | an ensemble of five intent questions and a fake-prerequisite question; the budget raised from 24,000 characters | single questions were fragile at their low thresholds; 26 of the remaining training misses had been too long to send; the rest were "install this tool from a vercel.app link first" | 78.8% at 0.3% | 79.6% at 0.6% |
+| released | round 2, measured in the packed package | | 77.7% at 0.4% | 80.6% at 0.4% |
 
 Each question's separation, scored at the 96,000-character budget (AUC; recall at a 1% false-flag threshold chosen on training):
 
@@ -291,7 +306,10 @@ bun scripts/benchmark-report.ts all=<results> --write-derived
 bun scripts/benchmark-subset.ts <results> <unseen> --splits test,held-out
 bun scripts/benchmark-report.ts after=<unseen> before=<unseen-before> --out docs/benchmark.md
 bun scripts/benchmark-tuning.ts <before> <results> --out docs/benchmark.md
-python3 scripts/benchmark-plot.py <unseen> docs/benchmark.png
+# figures, in the image that has IBM Plex: docker build -t skill-scanner-figures -f scripts/benchmark-figures.Dockerfile scripts
+python3 scripts/benchmark-figures.py <unseen> <timing> scripts/benchmark-rounds.json docs
+python3 scripts/benchmark-plot.py <unseen> docs/benchmark.png --timing <timing>
+python3 scripts/benchmark-plot.py <unseen> docs/benchmark-tradeoff.png --style value --timing <timing>
 python3 scripts/benchmark-plot.py <results> docs/benchmark-tuning.png --style tuning --before <before> --map <splits.json>
 # tuning
 bun scripts/benchmark-score.ts <results>/static.json --splits train,val --misses train

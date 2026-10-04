@@ -45,7 +45,7 @@ const FLAGS: FlagSpecs = {
   judge: {
     type: "boolean",
     description:
-      "The jev judge runs by default when a jev key is set; --judge also uses a gateway key and warns without one, --no-judge turns it off",
+      "jev runs by default once TYPESAFE_API_KEY is set; --judge also uses a gateway key and warns without one, --no-judge turns it off",
   },
   with: {
     type: "string",
