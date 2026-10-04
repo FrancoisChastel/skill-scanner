@@ -1,6 +1,6 @@
 {
   "name": "@french-castle/skill-scanner",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Scan Agent Skills for prompt injection, hidden instructions, exfiltration, and remote code before Claude Code, Codex, OpenCode, Pi, or npx skills installs them. Standalone and offline by default; TypeSafe's jev is an optional second opinion.",
   "keywords": [
     "agent-skills",

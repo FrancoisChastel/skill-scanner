@@ -1,6 +1,6 @@
 # skill-scanner design
 
-Status: v0.3.0, 2026-09-30 (npm `@french-castle/skill-scanner`). This document records what the scanner does, why it is built this way, and what it does not cover. Decisions are numbered in section 14 and kept current.
+Status: v0.4.0, 2026-10-04 (npm `@french-castle/skill-scanner`). This document records what the scanner does, why it is built this way, and what it does not cover. Decisions are numbered in section 14 and kept current.
 
 ## 1. What this is
 

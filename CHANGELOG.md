@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-04
+
 ### Added
 
 - A benchmark of the scanner's configurations (`docs/benchmark.md` and its figures): the static rules alone, with the jev judge, the judge alone, each external analyzer alone and on top of the rules, and their combinations, on 527 malicious and 2,240 benign skills, with what is blocked and what is flagged, wall time, and judge cost. A fixed split (`src/benchmark/split.ts`: training, validation, test, and seven held-out corpora) separates the data tuning reads from the data results are reported on. `scripts/benchmark.ts` runs it; `scripts/benchmark-report.ts`, `benchmark-tuning.ts`, `benchmark-subset.ts` and `benchmark-score.ts` score and tabulate it; `scripts/benchmark-plot.py` draws the figures; `scripts/judge-lab.ts` and `judge-lab-score.ts` tune the judge's questions on cached answers; `src/benchmark/metrics.ts` is the scoring.
