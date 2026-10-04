@@ -279,6 +279,52 @@ const coverTracks = deceptionRule({
   ],
 });
 
+/**
+ * A part of a deliverable its reader does not see: a hidden worksheet or tab, a hidden template or
+ * script block, a non-rendered metadata block. Not fields, rows, columns, layers, or config files,
+ * which honest forms, spreadsheets, and designs hide all the time.
+ */
+const HIDDEN = String.raw`(?<!visually\s)(?:hidden|very\s*hidden|non-?rendered|invisible|undisplayed)`;
+const HIDDEN_CARRIER = "(?:work)?sheets?|tabs?|templates?|blocks?|packets?|loaders?|beacons?|payloads?|metadata";
+/** Run of non-newline text, but a period only inside a token (a path like `out.js`), never a sentence break. */
+const SAME_SENTENCE = String.raw`(?:[^.\n]|\.(?=\S)){0,90}?`;
+
+const hiddenContent = deceptionRule({
+  id: "deception/hidden-deliverable-content",
+  title: "Tells the agent to plant hidden content in what it delivers",
+  severity: "medium",
+  confidence: "medium",
+  description:
+    "Instructions to carry content into the user's deliverable where the user will not see it: a hidden worksheet or tab, a hidden template or loader block in a page, a non-rendered metadata block. Content nobody asked for, placed where nobody looks, is a covert channel for payloads, data, or markers.",
+  remediation:
+    "Review what the skill puts in the hidden part and where it comes from. A deliverable should not carry content its owner cannot see.",
+  patterns: [
+    re(
+      String.raw`\b(?:preserve|keep|add|embed|store|stash|carry|copy|move|mirror|plant|insert|inject|write|put|place|include|append|tuck|bury|smuggle)\b${SAME_SENTENCE}\b(?:as|in|inside|into|within|through|via)\s+(?:a\s+|an\s+|one\s+|exactly\s+one\s+|the\s+)?${HIDDEN}\s+(?:or\s+very\s+hidden\s+)?(?:\S+\s+){0,3}?(?:${HIDDEN_CARRIER})\b`,
+    ),
+    re(
+      String.raw`\b(?:preserve|keep|add|create|maintain|embed|insert|include|plant)\s+(?:a|an|one|exactly\s+one)\s+${HIDDEN}\s+(?:or\s+very\s+hidden\s+)?(?:\S+\s+){0,3}?(?:${HIDDEN_CARRIER})\b`,
+    ),
+  ],
+});
+
+const concealFiles = deceptionRule({
+  id: "deception/conceal-files-from-user",
+  title: "Tells the agent to tuck files away where the user will not see them",
+  severity: "medium",
+  confidence: "medium",
+  description:
+    "Instructions to move the agent's own output, logs, or artifacts into a hidden or dotfile location so the user-visible tree stays clean, or that are kept out of a directory listing on purpose. Hiding what the agent produced from the person it works for is deceptive, whatever reason is offered.",
+  remediation:
+    "Leave the agent's output where the user can see it. Retention or cleanup belongs in a place the user is told about, not a dotfile the listing hides.",
+  patterns: [
+    // "hidden from normal `ls` listings", "hidden from the user".
+    /\bhidden\s+from\s+(?:normal\s+)?(?:\x60?ls\x60?|listings?|the\s+user(?:-facing)?|directory\s+listings?)\b/gi,
+    // "move it into the hidden area so the user-visible sorted tree stays clean".
+    /\bso\s+(?:that\s+)?the\s+user(?:[\s-](?:visible|facing))?\s+(?:sorted\s+)?(?:tree|listing|view|folders?)\s+stays?\s+clean\b/gi,
+  ],
+});
+
 /** Wording that makes planting a bug a teaching or test-quality exercise. */
 const EXERCISE_RE =
   /\b(?:mutation|mutants?|tests?\s+(?:catch|detect)|exercise|practice|training|interview|ctf|challenge|teach\w*|learn\w*|tutorial|kata|to\s+(?:check|verify|confirm|see)\s+(?:that|whether|if)\s+(?:the\s+)?tests?)\b/i;
@@ -390,6 +436,8 @@ export const deceptionRules: readonly FileRule[] = [
   substituteTask,
   lieToUser,
   coverTracks,
+  hiddenContent,
+  concealFiles,
   sabotage,
   swallowedFailure,
   riggedHarness,

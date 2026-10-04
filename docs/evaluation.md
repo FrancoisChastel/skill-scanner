@@ -1,6 +1,6 @@
 # Evaluation
 
-How the rules were calibrated, on what, and what they miss. Numbers are from the static scanner alone (no judge, no external analyzers), version 0.1.0, 2026-09-30.
+How the rules were calibrated, on what, and what they miss. For what each optional addition (the jev judge, the external analyzers) adds on top of the rules, and what it costs, see [benchmark.md](./benchmark.md). Numbers are from the static scanner alone (no judge, no external analyzers), version 0.1.0, 2026-09-30.
 
 ## Method
 

@@ -40,13 +40,13 @@ interface Harness {
   readonly err: () => string;
 }
 
-function harness(opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}): Harness {
+function harness(opts: { cwd?: string; env?: NodeJS.ProcessEnv; isTTY?: boolean } = {}): Harness {
   const out: string[] = [];
   const err: string[] = [];
   const io: CliIO = {
     stdout: (t) => out.push(t),
     stderr: (t) => err.push(t),
-    isTTY: false,
+    isTTY: opts.isTTY ?? false,
     env: { SKILL_SCANNER_HOME: home, ...opts.env },
     cwd: opts.cwd ?? root,
     readStdin: async () => "",
@@ -58,7 +58,8 @@ function harness(opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {}): Harness 
 /** Deps that never reach the network or look for real keys and tools. */
 function fakeDeps(overrides: Partial<ScanDeps> = {}): Partial<ScanDeps> {
   return {
-    createJudge: () => ({ reason: "no API key in the environment" }),
+    // As the real one: by default (auto) a missing key is quiet; asked for, it is a reason to warn.
+    createJudge: (cfg) => (cfg.enabled === "auto" ? { reason: "no jev key", quiet: true } : { reason: "no API key in the environment" }),
     createAnalyzers: async () => [],
     scanSource: async (raw) => {
       throw new Error(`cannot fetch ${raw}: offline test`);
@@ -68,6 +69,58 @@ function fakeDeps(overrides: Partial<ScanDeps> = {}): Partial<ScanDeps> {
 }
 
 const scan = (argv: string[], h: Harness, deps: Partial<ScanDeps> = {}) => createScanCommand(fakeDeps(deps)).run(argv, h.io);
+
+/** An analyzer double: installed or not, finding nothing. */
+const tool = (name: string, installed: boolean) => ({
+  name,
+  unavailable: async () => (installed ? undefined : `${name} is not installed`),
+  run: async () => [],
+});
+
+describe("defaults: the judge with a key, gitleaks when installed", () => {
+  test("on a terminal, a scan without a jev key ends with what a key adds", async () => {
+    const h = harness({ isTTY: true });
+    expect(await scan(["skills/ok"], h)).toBe(0);
+    expect(h.err()).toContain("Tip:");
+    expect(h.err()).toContain("78% against 40%");
+    expect(h.err()).toContain("TYPESAFE_API_KEY");
+  });
+
+  test("no tip in piped output, in JSON, with --quiet, or once the judge is turned off", async () => {
+    for (const argv of [["skills/ok"], ["skills/ok", "--format", "json"], ["skills/ok", "-q"]]) {
+      const h = harness({ isTTY: argv.length === 1 ? false : true });
+      await scan(argv, h);
+      expect(h.err()).not.toContain("Tip:");
+    }
+    const h = harness({ isTTY: true });
+    await scan(["skills/ok", "--no-judge"], h);
+    expect(h.err()).not.toContain("Tip:");
+  });
+
+  test("gitleaks, on by default, is left out quietly when not installed; asked for with --with, it is reported", async () => {
+    // Arrange
+    const deps = { createAnalyzers: async (names: readonly string[]) => names.map((n) => tool(n, false)) };
+    const quiet = harness();
+    const asked = harness();
+
+    // Act
+    await scan(["skills/ok", "--format", "json"], quiet, deps);
+    await scan(["skills/ok", "--format", "json", "--with", "gitleaks"], asked, deps);
+
+    // Assert
+    expect((JSON.parse(quiet.out()) as ScanReport).analyzers).toEqual([]);
+    expect((JSON.parse(asked.out()) as ScanReport).analyzers).toEqual([
+      { name: "gitleaks", status: "skipped", detail: "gitleaks is not installed" },
+    ]);
+    expect(quiet.err()).toBe("");
+  });
+
+  test("gitleaks runs by default when it is installed", async () => {
+    const h = harness();
+    await scan(["skills/ok", "--format", "json"], h, { createAnalyzers: async (names) => names.map((n) => tool(n, true)) });
+    expect((JSON.parse(h.out()) as ScanReport).analyzers).toEqual([{ name: "gitleaks", status: "ran" }]);
+  });
+});
 
 describe("scan command", () => {
   test("exits 0 and reports no findings for a benign skill", async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SkillBundle } from "../../src/core/types";
 import { createJudge, INSTRUCTIONS, PROBES, STATE_BUDGET } from "../../src/judge";
-import { PROBE_IDS } from "../../src/judge/probes";
+import { PROBE_IDS, THREAT_PROBE_IDS, THREAT_PROBES } from "../../src/judge/probes";
 import { NO_KEY } from "../../src/judge/providers";
 import { buildState } from "../../src/judge/state";
 import { fakeFetch, fakeKey, judgeCfg, makeBundle, makeFinding, neutralReply, textFile } from "./helpers";
@@ -17,7 +17,7 @@ async function sentFor(bundle: SkillBundle, env: NodeJS.ProcessEnv = ENV) {
 }
 
 describe("request body", () => {
-  test("asks the eight probes as choice questions with true and false options", async () => {
+  test("asks the eight review probes and the six threat probes as choice questions with true and false options", async () => {
     // Act
     const { calls } = await sentFor(makeBundle());
 
@@ -25,12 +25,18 @@ describe("request body", () => {
     const body = calls[0]!.body;
     const questions = body.questions ?? {};
     expect(body.model).toBe("jev-latest");
-    expect(Object.keys(questions)).toEqual([...PROBE_IDS]);
+    expect(Object.keys(questions)).toEqual([...PROBE_IDS, ...THREAT_PROBE_IDS]);
     for (const probe of PROBES) {
       const q = questions[probe.id]!;
       expect(q.type).toBe("choice");
       expect(Object.keys(q.criteria as object)).toEqual(["true", "false"]);
       expect(q.instructions).toBe(`${INSTRUCTIONS}\n\n${probe.question}`);
+    }
+    for (const probe of THREAT_PROBES) {
+      const q = questions[probe.id]!;
+      expect(q.type).toBe("choice");
+      expect(q.criteria).toEqual({ true: probe.yes, false: probe.no });
+      expect(q.instructions).toBe(`${probe.frame}\n\n${probe.question}`);
     }
     expect(calls[0]!.rawBody).not.toContain("noul");
   });
@@ -173,7 +179,7 @@ describe("skipped bundles", () => {
     [
       "text over the budget is skipped, not truncated",
       makeBundle({ files: [textFile("SKILL.md", "skill-md", "a".repeat(STATE_BUDGET))] }),
-      /over the judge's 24000 budget; skipped rather than truncated/,
+      new RegExp(`over the judge's ${STATE_BUDGET} budget; skipped rather than truncated`),
     ],
     [
       "a file truncated while collecting is not sent",

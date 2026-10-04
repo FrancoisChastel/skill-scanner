@@ -236,6 +236,8 @@ export const executionRules: readonly FileRule[] = [
   },
   patternRule({
     id: "exec/manual-install-lure",
+    // Delivery tricks aimed at the user, which no judge probe asks about: the judge may confirm, never doubt.
+    hard: true,
     title: "Tells you to download and install software from a throwaway site",
     category: "remote-execution",
     severity: "high",
@@ -363,6 +365,8 @@ export const executionRules: readonly FileRule[] = [
   }),
   patternRule({
     id: "exec/password-protected-archive",
+    // Delivery tricks aimed at the user, which no judge probe asks about: the judge may confirm, never doubt.
+    hard: true,
     title: "Extracts a password-protected archive",
     category: "obfuscation",
     severity: "high",

@@ -7,6 +7,7 @@ import { withDeadline } from "../guard/deadline";
 import { loadTrust, trustedDigests } from "../guard/state";
 import { summarizeForAgent } from "../report/index";
 import { scanPath, type TargetScanner } from "../scan";
+import { scanOptionsFrom } from "../second-opinions";
 import { GUARD_SCOPE_ENV, GUARD_STATE_ENV } from "./guard-env";
 import { onlySkillBundles, scanGaps } from "./select";
 
@@ -40,9 +41,7 @@ export async function scanForGitHook(dir: string, label: string, io: CliIO, deps
   const config = await loadConfig(undefined, io.env);
   const scan = deps.scan ?? scanPath;
   const ms = deps.deadlineMs ?? GIT_HOOK_SCAN_MS;
-  const outcome = await withDeadline(ms, undefined, (signal) =>
-    scan(dir, { policy: { blockAt: config.blockAt, warnAt: config.warnAt }, suppressions: config.ignore, label, signal }),
-  );
+  const outcome = await withDeadline(ms, undefined, (signal) => scan(dir, { ...scanOptionsFrom(config, { quick: true }), label, signal }));
   if (outcome.status === "timeout") throw new Error(`the scan did not finish within ${Math.round(ms / 1000)} s`);
   if (outcome.status === "error") throw outcome.error;
   // Under the skills CLI only skill directories get installed; judge the tree the same way.

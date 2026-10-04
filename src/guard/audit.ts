@@ -5,6 +5,7 @@ import { compareFindings, type VerdictPolicy, verdictFor, worstVerdict } from ".
 import type { ScanReport } from "../core/types";
 import { scannerPaths } from "../paths";
 import { scanPath, type TargetScanner } from "../scan";
+import { scanOptionsFrom, secondOpinionsFingerprint, secondOpinionsFrom } from "../second-opinions";
 import { PLUGIN_MARKERS, statFingerprint } from "./fingerprint";
 import { errorMessage, forEachLimit, isInside } from "./fsutil";
 import { skillRoots } from "./locations";
@@ -72,7 +73,8 @@ export async function auditInstalledDetailed(ctx: GuardContext, opts: AuditOptio
   const [trust, stored] = await Promise.all([loadTrust(ctx.env), loadFlaggedRaw(ctx.env)]);
   const trusted = trustedDigests(trust);
   const previous = stored.filter((e) => !isEntryTrusted(e, trusted));
-  const policyFp = policyFingerprint(ctx.config);
+  // Cached results are keyed by what would judge them now: a new key, or gitleaks installed since, rescans.
+  const policyFp = policyFingerprint(ctx.config, await secondOpinionsFingerprint(secondOpinionsFrom(ctx.config, true), ctx.env));
   const deadline = Date.now() + (opts.deadlineMs ?? AUDIT_DEADLINE_MS);
   const done = new Map<string, InstalledSkill>();
   const errors: { path: string; message: string }[] = [];
@@ -146,8 +148,7 @@ async function assessTarget(
   }
   const scan = opts.scan ?? scanPath;
   const report = await scan(t.realPath, {
-    policy: { blockAt: ctx.config.blockAt, warnAt: ctx.config.warnAt },
-    suppressions: ctx.config.ignore,
+    ...scanOptionsFrom(ctx.config, { quick: true }),
     label: t.path,
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   });

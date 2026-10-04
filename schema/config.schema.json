@@ -37,10 +37,15 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean", "default": false },
-        "provider": { "enum": ["typesafe", "openrouter", "vercel"], "description": "Force a provider. By default the key's prefix decides." },
-        "model": { "type": "string", "description": "Override the provider's default jev model id." },
-        "baseUrl": { "type": "string", "description": "HTTPS endpoint override; plain HTTP only for localhost." },
+        "enabled": {
+          "enum": [true, false, "auto"],
+          "default": "auto",
+          "description": "auto: run when a jev key is set (SKILL_SCANNER_JEV_KEY or TYPESAFE_API_KEY, or the key of the host provider names), otherwise scan offline without an error. true: also use a gateway key, and warn when there is none. false: never."
+        },
+        "provider": { "enum": ["typesafe", "openrouter", "vercel", "cloudflare", "ollama", "custom"], "description": "Force a provider. By default the key's prefix decides; cloudflare, ollama, and custom must be named here." },
+        "model": { "type": "string", "description": "Override the provider's default model id." },
+        "baseUrl": { "type": "string", "description": "HTTPS endpoint override; plain HTTP only for localhost. Required for custom." },
+        "accountId": { "type": "string", "pattern": "^[0-9a-fA-F]{32}$", "description": "Cloudflare Workers AI account id (or set CLOUDFLARE_ACCOUNT_ID)." },
         "timeoutMs": { "type": "integer", "minimum": 1, "default": 15000 }
       }
     },
@@ -51,7 +56,7 @@
       "properties": {
         "skillspector": { "type": "boolean", "default": false },
         "cisco": { "type": "boolean", "default": false },
-        "gitleaks": { "type": "boolean", "default": false },
+        "gitleaks": { "type": "boolean", "default": true, "description": "On by default: runs whenever gitleaks is installed." },
         "osv-scanner": { "type": "boolean", "default": false },
         "semgrep": { "type": "boolean", "default": false }
       }

@@ -20,8 +20,11 @@ const WORKER_HEAP_MB = 1024;
 /** The CLI entry, as built for the runtime copy, the npm package, and the source tree (tests). */
 const ENTRY_CANDIDATES = ["./skill-scanner.mjs", "./cli.js", "../cli.js", "./cli.ts"];
 
-/** What a worker can be given: plain data. Rules, judges, analyzers, and clocks keep a scan in-process. */
-type PortableOptions = Pick<ScanOptions, "policy" | "limits" | "suppressions" | "onlySkills" | "label">;
+/**
+ * What a worker can be given: plain data. Rules, judges, analyzers, and clocks keep a scan in-process;
+ * second opinions travel as settings and are built inside the worker, under the same deadline.
+ */
+type PortableOptions = Pick<ScanOptions, "policy" | "limits" | "suppressions" | "onlySkills" | "label" | "secondOpinions">;
 
 interface ScanJob {
   readonly kind: typeof JOB;
@@ -100,6 +103,7 @@ function portable(o: Omit<ScanOptions, "signal">): PortableOptions {
     ...(o.suppressions ? { suppressions: o.suppressions } : {}),
     ...(o.onlySkills ? { onlySkills: o.onlySkills } : {}),
     ...(o.label !== undefined ? { label: o.label } : {}),
+    ...(o.secondOpinions ? { secondOpinions: o.secondOpinions } : {}),
   };
 }
 

@@ -42,7 +42,11 @@ const FLAGS: FlagSpecs = {
   },
   verbose: { type: "boolean", short: "v", description: "Show evidence, remediation, and judge notes" },
   config: { type: "string", value: "<file>", description: "Config file (default ~/.skill-scanner/config.json)" },
-  judge: { type: "boolean", description: "Ask the jev judge for a second opinion; --no-judge turns it off" },
+  judge: {
+    type: "boolean",
+    description:
+      "The jev judge runs by default when a jev key is set; --judge also uses a gateway key and warns without one, --no-judge turns it off",
+  },
   with: {
     type: "string",
     multiple: true,
@@ -107,19 +111,29 @@ function parseSettings(argv: readonly string[]): Settings {
   };
 }
 
+/** Shown after a text scan when the judge is on by default but has no key. Figures: docs/benchmark.md. */
+export const JEV_HINT =
+  `Tip: ${TOOL_NAME} runs TypeSafe's jev judge by default once it has a key, and then flags about twice as many ` +
+  "malicious skills (78% against 40% for the rules alone in the benchmark), for about $0.0003 a skill. " +
+  'Set TYPESAFE_API_KEY (https://typesafe.ai); `"judge": {"enabled": false}` in the config hides this tip.';
+
 function reaches(verdict: Verdict, failOn: FailOn): boolean {
   if (failOn === "never") return false;
   return failOn === "warn" ? verdict !== "pass" : verdict === "block";
 }
 
-/** The judge, or nothing: a missing key or provider downgrades to an offline scan with a warning. */
-function resolveJudge(s: Settings, config: Config, io: CliIO, deps: ScanDeps): BundleJudge | undefined {
-  const enabled = s.judge ?? config.judge.enabled;
-  if (!enabled) return undefined;
-  const { judge, reason } = deps.createJudge({ ...config.judge, enabled: true }, io.env);
-  if (judge) return judge;
+/**
+ * The judge, or nothing. With `--judge` or `enabled: true`, a missing key is a warning; by default
+ * (`auto`) it is not an error at all, and the scan ends with a hint on what a key adds.
+ */
+function resolveJudge(s: Settings, config: Config, io: CliIO, deps: ScanDeps): { judge?: BundleJudge; hint: boolean } {
+  const mode = s.judge ?? config.judge.enabled;
+  if (mode === false) return { hint: false };
+  const { judge, reason, quiet } = deps.createJudge({ ...config.judge, enabled: mode }, io.env);
+  if (judge) return { judge, hint: false };
+  if (quiet) return { hint: true };
   io.stderr(`${TOOL_NAME}: the jev judge is not available (${reason ?? "no reason given"}); scanning offline only.\n`);
-  return undefined;
+  return { hint: false };
 }
 
 async function resolveAnalyzers(s: Settings, config: Config, io: CliIO, deps: ScanDeps): Promise<ExternalAnalyzer[]> {
@@ -127,7 +141,14 @@ async function resolveAnalyzers(s: Settings, config: Config, io: CliIO, deps: Sc
   const names = [...new Set<AnalyzerName | "auto">([...fromConfig, ...s.with])];
   if (names.length === 0) return [];
   try {
-    return await deps.createAnalyzers(names, config, io.env);
+    const all = await deps.createAnalyzers(names, config, io.env);
+    // One the config turns on (gitleaks by default) but that is not installed is left out quietly; `doctor`
+    // says how to add it. One asked for with --with stays, so the report says it could not run.
+    const asked = new Set<string>(s.with);
+    const kept = await Promise.all(
+      all.map(async (a) => (asked.has(a.name) || !(await a.unavailable().catch(() => "unavailable")) ? a : undefined)),
+    );
+    return kept.filter((a): a is ExternalAnalyzer => a !== undefined);
   } catch (e) {
     io.stderr(`${TOOL_NAME}: external analyzers unavailable (${e instanceof Error ? e.message : String(e)}); continuing without them.\n`);
     return [];
@@ -191,7 +212,7 @@ function render(reports: readonly ScanReport[], prefixes: ReadonlyMap<ScanReport
 async function run(argv: readonly string[], io: CliIO, deps: ScanDeps): Promise<number> {
   const s = parseSettings(argv);
   const config = await loadConfig(s.configPath, io.env);
-  const judge = resolveJudge(s, config, io, deps);
+  const { judge, hint } = resolveJudge(s, config, io, deps);
   const analyzers = await resolveAnalyzers(s, config, io, deps);
   const opts: ScanOptions = {
     policy: { blockAt: config.blockAt, warnAt: config.warnAt },
@@ -234,6 +255,8 @@ async function run(argv: readonly string[], io: CliIO, deps: ScanDeps): Promise<
   } else if (!s.quiet) {
     io.stdout(text);
   }
+  // Only for a person at a terminal: piped output and CI logs stay as they were.
+  if (hint && io.isTTY && s.format === "text" && !s.quiet) io.stderr(`\n${JEV_HINT}\n`);
   return exit;
 }
 

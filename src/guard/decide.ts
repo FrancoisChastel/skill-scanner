@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import type { ScanReport } from "../core/types";
 import { summarizeForAgent } from "../report/index";
 import { scanPath } from "../scan";
+import { scanOptionsFrom } from "../second-opinions";
 import { guardCommandLine, shellQuote } from "../sources/guard-env";
 import { type SourceScan, type SourceScanOptions, scanSource } from "../sources/index";
 import type { TargetScanner } from "./audit";
@@ -217,8 +218,7 @@ async function scanAndDecide(
       cwd: ctx.cwd,
       env: ctx.env,
       keep: false,
-      policy: { blockAt: ctx.config.blockAt, warnAt: ctx.config.warnAt },
-      suppressions: ctx.config.ignore,
+      ...scanOptionsFrom(ctx.config, { quick: true }),
       ...(ctx.signal ? { signal: ctx.signal } : {}),
       ...(onlySkills ? { onlySkills } : {}),
       ...(skillBundlesOnly ? { skillBundlesOnly } : {}),
@@ -285,8 +285,7 @@ async function claudePluginInstall(target: string, ctx: GuardContext, deps: Guar
     const scan = deps.scanPath ?? scanPath;
     try {
       const report = await scan(src, {
-        policy: { blockAt: ctx.config.blockAt, warnAt: ctx.config.warnAt },
-        suppressions: ctx.config.ignore,
+        ...scanOptionsFrom(ctx.config, { quick: true }),
         label: target,
       });
       return decideReport(report, target, ctx, trust);
@@ -315,8 +314,7 @@ async function codexPluginAdd(
   const scan = deps.scanPath ?? scanPath;
   try {
     const report = await scan(source.path, {
-      policy: { blockAt: ctx.config.blockAt, warnAt: ctx.config.warnAt },
-      suppressions: ctx.config.ignore,
+      ...scanOptionsFrom(ctx.config, { quick: true }),
       label: target,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });

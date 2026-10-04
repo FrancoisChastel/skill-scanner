@@ -14,12 +14,21 @@ export type HookPolicy = "ask" | "allow" | "deny";
 export const ANALYZER_NAMES = ["skillspector", "cisco", "gitleaks", "osv-scanner", "semgrep"] as const;
 export type AnalyzerName = (typeof ANALYZER_NAMES)[number];
 
+/**
+ * When the jev judge runs. `auto` (the default): when a jev key is set, `SKILL_SCANNER_JEV_KEY` or
+ * `TYPESAFE_API_KEY` (or the key of the host `provider` names), and otherwise the scan stays offline
+ * without a word of error. `true`: also with a general gateway key (OpenRouter, Vercel AI Gateway),
+ * and say when there is no key at all. `false`: never. Judging sends redacted skill text to the host.
+ */
+export type JudgeMode = boolean | "auto";
+
 export interface JudgeConfig {
-  /** Off unless turned on here or with `--judge`: judging sends skill text to a third party. */
-  readonly enabled: boolean;
-  readonly provider?: "typesafe" | "openrouter" | "vercel";
+  readonly enabled: JudgeMode;
+  readonly provider?: "typesafe" | "openrouter" | "vercel" | "cloudflare" | "ollama" | "custom";
   readonly model?: string;
   readonly baseUrl?: string;
+  /** Cloudflare Workers AI account id (also `CLOUDFLARE_ACCOUNT_ID`). */
+  readonly accountId?: string;
   readonly timeoutMs: number;
 }
 
@@ -44,8 +53,9 @@ export const DEFAULT_CONFIG: Config = Object.freeze({
   blockAt: "high",
   warnAt: "medium",
   ignore: [],
-  judge: { enabled: false, timeoutMs: 15_000 },
-  analyzers: { skillspector: false, cisco: false, gitleaks: false, "osv-scanner": false, semgrep: false },
+  judge: { enabled: "auto", timeoutMs: 15_000 },
+  // gitleaks runs whenever it is installed: offline, fast, and its findings are rarely wrong.
+  analyzers: { skillspector: false, cisco: false, gitleaks: true, "osv-scanner": false, semgrep: false },
   hooks: { onWarn: "ask", onError: "ask", quarantine: true },
 } satisfies Config);
 
@@ -101,12 +111,19 @@ export function parseConfig(raw: unknown, where = "config"): Config {
 
   const j = (o.judge ?? {}) as Record<string, unknown>;
   if (typeof j !== "object" || j === null || Array.isArray(j)) fail("judge must be an object");
-  rejectUnknown(j, ["enabled", "provider", "model", "baseUrl", "timeoutMs"], "judge", fail);
+  rejectUnknown(j, ["enabled", "provider", "model", "baseUrl", "accountId", "timeoutMs"], "judge", fail);
   const provider = j.provider;
-  if (provider !== undefined && provider !== "typesafe" && provider !== "openrouter" && provider !== "vercel")
-    fail("judge.provider must be typesafe, openrouter, or vercel");
+  const providers = ["typesafe", "openrouter", "vercel", "cloudflare", "ollama", "custom"];
+  if (provider !== undefined && !providers.includes(provider as string)) fail(`judge.provider must be one of ${providers.join(", ")}`);
+  if (j.accountId !== undefined && (typeof j.accountId !== "string" || !/^[0-9a-f]{32}$/i.test(j.accountId)))
+    fail("judge.accountId must be a Cloudflare account id (32 hex characters)");
   const judge: JudgeConfig = {
-    enabled: j.enabled === undefined ? false : typeof j.enabled === "boolean" ? j.enabled : fail("judge.enabled must be a boolean"),
+    enabled:
+      j.enabled === undefined
+        ? DEFAULT_CONFIG.judge.enabled
+        : typeof j.enabled === "boolean" || j.enabled === "auto"
+          ? j.enabled
+          : fail('judge.enabled must be true, false, or "auto"'),
     timeoutMs:
       j.timeoutMs === undefined
         ? 15_000
@@ -116,6 +133,7 @@ export function parseConfig(raw: unknown, where = "config"): Config {
     ...(provider ? { provider: provider as JudgeConfig["provider"] & string } : {}),
     ...(typeof j.model === "string" ? { model: j.model } : {}),
     ...(typeof j.baseUrl === "string" ? { baseUrl: j.baseUrl } : {}),
+    ...(typeof j.accountId === "string" ? { accountId: j.accountId } : {}),
   } as JudgeConfig;
 
   const a = (o.analyzers ?? {}) as Record<string, unknown>;

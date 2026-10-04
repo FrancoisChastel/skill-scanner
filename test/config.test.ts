@@ -14,6 +14,16 @@ describe("parseConfig", () => {
     expect(config).toEqual(DEFAULT_CONFIG);
   });
 
+  test("by default the judge runs when a jev key is set, and gitleaks when it is installed", () => {
+    expect(DEFAULT_CONFIG.judge.enabled).toBe("auto");
+    expect(ANALYZER_NAMES.filter((n) => DEFAULT_CONFIG.analyzers[n])).toEqual(["gitleaks"]);
+  });
+
+  test('judge.enabled takes true, false, or "auto", and nothing else', () => {
+    for (const enabled of [true, false, "auto"] as const) expect(parseConfig({ judge: { enabled } }).judge.enabled).toBe(enabled);
+    expect(() => parseConfig({ judge: { enabled: "yes" } })).toThrow(ConfigError);
+  });
+
   test("a full config round-trips every field", () => {
     // Arrange
     const raw = {
@@ -75,7 +85,15 @@ describe("config schema", () => {
         judge: Object.fromEntries(
           Object.keys(schema.properties.judge.properties).map((k) => [
             k,
-            k === "enabled" ? false : k === "timeoutMs" ? 1 : k === "provider" ? "typesafe" : "x",
+            k === "enabled"
+              ? false
+              : k === "timeoutMs"
+                ? 1
+                : k === "provider"
+                  ? "typesafe"
+                  : k === "accountId"
+                    ? "0123456789abcdef0123456789abcdef"
+                    : "x",
           ]),
         ),
       }),
@@ -86,6 +104,8 @@ describe("config schema", () => {
     expect(schema.properties.blockAt.default).toBe(DEFAULT_CONFIG.blockAt);
     expect(schema.properties.warnAt.default).toBe(DEFAULT_CONFIG.warnAt);
     expect(schema.properties.judge.properties.timeoutMs.default).toBe(DEFAULT_CONFIG.judge.timeoutMs);
+    expect(schema.properties.judge.properties.enabled.default).toBe(DEFAULT_CONFIG.judge.enabled);
+    for (const n of ANALYZER_NAMES) expect(schema.properties.analyzers.properties[n].default).toBe(DEFAULT_CONFIG.analyzers[n]);
     expect(schema.properties.hooks.properties.onWarn.default).toBe(DEFAULT_CONFIG.hooks.onWarn);
     expect(schema.properties.hooks.properties.onError.default).toBe(DEFAULT_CONFIG.hooks.onError);
     expect(schema.properties.hooks.properties.quarantine.default).toBe(DEFAULT_CONFIG.hooks.quarantine);

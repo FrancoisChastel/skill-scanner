@@ -1,7 +1,7 @@
 import { open } from "node:fs/promises";
 import { basename } from "node:path";
 import { detectAnalyzers } from "../analyzers";
-import { type Config, ConfigError, loadConfig } from "../config";
+import { type Config, ConfigError, DEFAULT_CONFIG, loadConfig } from "../config";
 import { listQuarantine } from "../guard/quarantine";
 import { describeJudge, pingJudge } from "../judge";
 import type { ScannerPaths } from "../paths";
@@ -54,15 +54,19 @@ async function checkConfig(ctx: CheckContext): Promise<{ check: Check; config?: 
 async function judgeChecks(config: Config | undefined, ctx: CheckContext): Promise<Check[]> {
   const area = "judge";
   if (!config) return [{ area, status: "skip", message: "not checked (the config does not load)" }];
-  if (!config.judge.enabled)
+  if (config.judge.enabled === false) return [{ area, status: "skip", message: `off in the config${ctx.live ? "; --live skipped" : ""}` }];
+  const d = describeJudge(config.judge, ctx.env);
+  if (d.problem && config.judge.enabled === "auto" && config.judge.provider === undefined)
     return [
       {
         area,
         status: "skip",
-        message: `off (optional second opinion; turn on with "judge": {"enabled": true} in the config or --judge)${ctx.live ? "; --live skipped" : ""}`,
+        message:
+          "jev runs by default once it has a key, and then flags about twice as many malicious skills (78% against 40% for the rules alone); " +
+          "without one, scans use the rules and gitleaks only",
+        fix: "export TYPESAFE_API_KEY=<your key>   # from https://typesafe.ai",
       },
     ];
-  const d = describeJudge(config.judge, ctx.env);
   if (d.problem) return [{ area, status: "warn", message: `enabled but unusable: ${d.problem}` }];
   const desc = [d.provider, d.model].filter(Boolean).join(" ");
   const checks: Check[] = [{ area, status: "ok", message: `${desc}${d.keyEnv ? ` (key from $${d.keyEnv})` : ""}` }];
@@ -77,8 +81,13 @@ async function analyzerChecks(config: Config | undefined, env: NodeJS.ProcessEnv
   const found = await detectAnalyzers(env);
   return found.map(({ info, path, version }): Check => {
     const network = info.network ? "; contacts the network when it runs" : "";
-    if (path) return { area: info.name, status: "ok", message: `${info.title}${version ? ` ${version}` : ""} at ${path}${network}` };
-    if (config?.analyzers[info.name])
+    const on = config?.analyzers[info.name] ?? false;
+    const ran = on ? "; runs with every scan" : "";
+    if (path) return { area: info.name, status: "ok", message: `${info.title}${version ? ` ${version}` : ""} at ${path}${network}${ran}` };
+    // On by default (gitleaks): a hint to install it, not a problem.
+    if (on && DEFAULT_CONFIG.analyzers[info.name])
+      return { area: info.name, status: "skip", message: `${info.title}: runs by default once installed${network}`, fix: info.install };
+    if (on)
       return { area: info.name, status: "warn", message: `${info.title} is enabled in the config but not installed`, fix: info.install };
     return { area: info.name, status: "skip", message: `${info.title}: not installed (optional)${network}`, fix: info.install };
   });

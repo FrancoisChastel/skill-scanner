@@ -107,14 +107,25 @@ describe("doctor", () => {
     expect(check(r, "judge")[0]).toMatchObject({ status: "skip" });
   });
 
-  test("an enabled judge without a key and an enabled analyzer that is missing are warnings", async () => {
+  test("a judge turned on without a key and an analyzer turned on but missing are warnings", async () => {
     await setup("pi");
-    await writeFile(join(t.state, "config.json"), JSON.stringify({ judge: { enabled: true }, analyzers: { gitleaks: true } }));
+    await writeFile(join(t.state, "config.json"), JSON.stringify({ judge: { enabled: true }, analyzers: { semgrep: true } }));
     const r = await report();
     expect(check(r, "judge")[0]).toMatchObject({ status: "warn" });
     expect(check(r, "judge")[0]!.message).toContain("enabled but unusable");
-    expect(check(r, "gitleaks")[0]).toMatchObject({ status: "warn", message: expect.stringContaining("enabled in the config") });
-    expect(check(r, "gitleaks")[0]!.fix).toBeTruthy();
+    expect(check(r, "semgrep")[0]).toMatchObject({ status: "warn", message: expect.stringContaining("enabled in the config") });
+    expect(check(r, "semgrep")[0]!.fix).toBeTruthy();
+    expect(r.ok).toBe(true);
+  });
+
+  test("by default, no jev key and no gitleaks are hints on what to add, not problems", async () => {
+    await setup("pi");
+    const r = await report();
+    expect(check(r, "judge")[0]).toMatchObject({ status: "skip", message: expect.stringContaining("twice as many malicious skills") });
+    expect(check(r, "judge")[0]!.fix).toContain("TYPESAFE_API_KEY");
+    const gitleaks = check(r, "gitleaks")[0]!;
+    if (gitleaks.status !== "ok")
+      expect(gitleaks).toMatchObject({ status: "skip", message: expect.stringContaining("runs by default once installed") });
     expect(r.ok).toBe(true);
   });
 

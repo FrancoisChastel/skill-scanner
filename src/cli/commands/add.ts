@@ -2,6 +2,7 @@ import { loadConfig } from "../../config";
 import type { ScanReport } from "../../core/types";
 import { formatReport, type ReportFormat } from "../../report/index";
 import { isolatedScanner } from "../../scan-worker";
+import { scanOptionsFrom } from "../../second-opinions";
 import {
   cloneUrlVariants,
   currentRuntime,
@@ -87,8 +88,7 @@ async function runAdd(argv: readonly string[], io: CliIO): Promise<number> {
   try {
     const selected = skillsArgs.all ? ["*"] : skillsArgs.skills;
     const report = await scanFetched(fetched, {
-      policy: { blockAt: config.blockAt, warnAt: config.warnAt },
-      suppressions: config.ignore,
+      ...scanOptionsFrom(config),
       ...(selected.length > 0 ? { onlySkills: selected } : {}),
       skillBundlesOnly: true,
       // In a worker: Ctrl+C and the command's own signal handlers keep working during the scan.

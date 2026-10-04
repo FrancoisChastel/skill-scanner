@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { summarizeForAgent } from "../report/index";
 import { scanPath } from "../scan";
+import { scanOptionsFrom } from "../second-opinions";
 import { withDeadline } from "./deadline";
 import { ALLOW, decideReport, type GuardDeps, INSTALL_DEADLINE_MS, mostSevere } from "./decide";
 import { errorMessage, isInside } from "./fsutil";
@@ -63,8 +64,7 @@ async function evaluateStaged(skillDir: string, files: readonly StagedFile[], ct
     const scan = deps.scanPath ?? scanPath;
     const outcome = await withDeadline(deps.installDeadlineMs ?? INSTALL_DEADLINE_MS, ctx.signal, (signal) =>
       scan(dir, {
-        policy: { blockAt: ctx.config.blockAt, warnAt: ctx.config.warnAt },
-        suppressions: ctx.config.ignore,
+        ...scanOptionsFrom(ctx.config, { quick: true }),
         label: skillDir,
         signal,
       }),

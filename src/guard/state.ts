@@ -181,9 +181,10 @@ function parseCachedScan(raw: unknown): CachedScan | undefined {
 }
 
 /** What a cached verdict depends on besides content: scanner version, rule set, and the user's policy. */
-export function policyFingerprint(config: Pick<Config, "blockAt" | "warnAt" | "ignore">): string {
+/** What a cached verdict depends on. `opinions` names the second opinions that would run (src/second-opinions.ts). */
+export function policyFingerprint(config: Pick<Config, "blockAt" | "warnAt" | "ignore">, opinions = ""): string {
   const rules = BUILTIN_RULES.map((r) => `${r.id}:${r.severity}:${r.confidence}`).join(",");
-  return sha256(`${VERSION}\n${rules}\n${config.blockAt}\n${config.warnAt}\n${JSON.stringify(config.ignore)}`);
+  return sha256(`${VERSION}\n${rules}\n${config.blockAt}\n${config.warnAt}\n${JSON.stringify(config.ignore)}\n${opinions}`);
 }
 
 export const cacheKey = (digest: string, policyFp: string): string => sha256(`${digest}\n${policyFp}`);

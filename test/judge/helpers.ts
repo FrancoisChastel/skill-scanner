@@ -1,7 +1,7 @@
 import type { JudgeConfig } from "../../src/config";
 import type { Finding, SkillBundle, SkillFile } from "../../src/core/types";
 import type { FetchLike } from "../../src/judge";
-import { PROBE_IDS, type ProbeId } from "../../src/judge/probes";
+import { PROBE_IDS, type ProbeId, THREAT_PROBE_IDS, type ThreatProbeId } from "../../src/judge/probes";
 
 /** Shared fixtures for the judge tests. Nothing here touches the network. */
 
@@ -42,9 +42,16 @@ export function makeFinding(over: Partial<Finding> = {}): Finding {
   };
 }
 
-/** Every probe at `fill`, with the given overrides. */
-export function scoresOf(over: Partial<Record<ProbeId, number>> = {}, fill = 0.3): Record<ProbeId, number> {
-  return Object.fromEntries(PROBE_IDS.map((id) => [id, over[id] ?? fill])) as Record<ProbeId, number>;
+/** Every review probe at `fill` and every threat probe at `threat` (0 by default, so no threat finding), with the given overrides. */
+export function scoresOf(
+  over: Partial<Record<ProbeId | ThreatProbeId, number>> = {},
+  fill = 0.3,
+  threat = 0,
+): Record<ProbeId | ThreatProbeId, number> {
+  return Object.fromEntries([
+    ...PROBE_IDS.map((id) => [id, over[id] ?? fill]),
+    ...THREAT_PROBE_IDS.map((id) => [id, over[id] ?? threat]),
+  ]) as Record<ProbeId | ThreatProbeId, number>;
 }
 
 /** A well-formed System One response for the given P(true) per probe. */

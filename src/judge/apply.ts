@@ -1,32 +1,44 @@
 import { joinPath } from "../core/engine";
 import type { Finding, SkillBundle } from "../core/types";
 import { findRule } from "../rules";
-import { JUDGE_REMEDIATION, judgeRuleId, PROBE_FOR_CATEGORY, PROBES, type Probe } from "./probes";
+import { JUDGE_REMEDIATION, PROBE_FOR_CATEGORY, THREAT_PROBE_IDS, THREAT_PROBES, type ThreatProbeId } from "./probes";
 import type { ProbeScores } from "./protocol";
 
 /**
- * Apply jev's answers monotonically: code decides, the model only nudges. A finding can be
- * doubted (confidence low, which costs one step of effective severity) or confirmed (confidence
- * raised one step, so a model can restore a finding its context demoted but not leap past it);
- * nothing is removed and no severity changes. A probe that fires with no static finding
- * in its family adds one medium note.
+ * Apply jev's answers monotonically: code decides, the model only nudges. A static finding can be
+ * doubted (confidence low, which costs one step of effective severity); nothing is removed and no
+ * severity changes. A skill whose threat score reaches THREAT_AT gets one medium finding of the
+ * judge's own, which warns and never blocks alone under the default policy.
  *
- * The thresholds are not calibrated on this pipeline. For reference, Cisco's selected screen
- * thresholds for the prompt_injection probe on MaliciousSkillBench were 0.048 to 0.061.
+ * Both rules were measured on the benchmark's training split and checked on validation
+ * (docs/benchmark.md, "Tuning the judge"). Confirming a finding (raising its confidence on a high
+ * answer) was dropped there: it added a false block and caught nothing the doubts and the threat
+ * score did not.
  */
 
 /** Below this P(true), a finding in the probe's family is doubted, unless it is hard evidence or critical. */
 export const DOUBT_BELOW = 0.05;
-/** At or above this P(true), a finding in the probe's family is confirmed. */
-export const CONFIRM_AT = 0.5;
-/** At or above this P(true), with no static finding in the family, the judge adds a medium finding. */
-export const ADD_AT = 0.85;
+/**
+ * At or above this threat score, the judge adds its finding: 0.5% of benign training skills reach
+ * it (0.6% on validation), against 79% of malicious ones. Measured on jev-1.13.0.
+ */
+export const THREAT_AT = 0.075;
+/** The rule id of the judge's own finding. */
+export const THREAT_RULE_ID = "judge/malicious-skill";
+
+/** The five intent probes; the sixth, unofficial_download, is a lure the others do not see and weighs as much as their mean. */
+const INTENT: readonly ThreatProbeId[] = THREAT_PROBE_IDS.filter((id) => id !== "unofficial_download");
+
+/** Half the mean of the five intent probes plus half the unofficial-download probe: a number from 0 to 1. */
+export function threatScore(scores: ProbeScores): number {
+  const intent = INTENT.reduce((sum, id) => sum + scores[id], 0) / INTENT.length;
+  return (intent + scores.unofficial_download) / 2;
+}
 
 export function applyScores(bundle: SkillBundle, findings: readonly Finding[], scores: ProbeScores, model: string): Finding[] {
   const reviewed = findings.map((f) => review(f, scores, model));
-  const covered = new Set(findings.map((f) => PROBE_FOR_CATEGORY[f.category]));
-  const added = PROBES.filter((p) => scores[p.id] >= ADD_AT && !covered.has(p.id)).map((p) => judgeFinding(bundle, p, scores[p.id], model));
-  return [...reviewed, ...added];
+  const score = threatScore(scores);
+  return score >= THREAT_AT ? [...reviewed, threatFinding(bundle, scores, score, model)] : reviewed;
 }
 
 function review(f: Finding, scores: ProbeScores, model: string): Finding {
@@ -34,12 +46,7 @@ function review(f: Finding, scores: ProbeScores, model: string): Finding {
   if (probe === undefined) return f;
   const pTrue = scores[probe];
   if (pTrue < DOUBT_BELOW && canDoubt(f)) return { ...f, confidence: "low", judge: { model, pTrue, effect: "doubted" } };
-  if (pTrue >= CONFIRM_AT) return { ...f, confidence: raiseConfidence(f.confidence), judge: { model, pTrue, effect: "confirmed" } };
   return { ...f, judge: { model, pTrue, effect: "none" } };
-}
-
-function raiseConfidence(c: Finding["confidence"]): Finding["confidence"] {
-  return c === "low" ? "medium" : "high";
 }
 
 /** A model can be argued with by the content it reads, so hard evidence and critical findings are never doubted. */
@@ -47,19 +54,26 @@ function canDoubt(f: Finding): boolean {
   return f.severity !== "critical" && findRule(f.ruleId)?.hard !== true;
 }
 
-function judgeFinding(bundle: SkillBundle, probe: Probe, pTrue: number, model: string): Finding {
+function threatFinding(bundle: SkillBundle, scores: ProbeScores, score: number, model: string): Finding {
+  // The answers that carried the score, strongest first, so a reader knows where to look.
+  const reasons = THREAT_PROBES.filter((p) => scores[p.id] >= 0.1)
+    .sort((a, b) => scores[b.id] - scores[a.id])
+    .slice(0, 3)
+    .map((p) => `${p.yes.replace(/^Yes: /, "").replace(/\.$/, "")} (P = ${scores[p.id].toFixed(2)})`);
   return {
-    ruleId: judgeRuleId(probe.id),
-    title: probe.title,
-    category: probe.category,
+    ruleId: THREAT_RULE_ID,
+    title: "jev: this skill looks malicious",
+    category: "deception",
     severity: "medium",
     confidence: "medium",
-    message: `jev: P(true) = ${pTrue.toFixed(2)} that this skill ${probe.claim}. No static rule found this; it is a model's opinion.`,
+    message:
+      `jev: threat score ${score.toFixed(2)}, at or above ${THREAT_AT}` +
+      `${reasons.length ? `; ${reasons.join("; ")}` : ""}. It is a model's opinion; no static rule needs to agree.`,
     location: { file: anchorFile(bundle) },
     bundle: bundle.name,
     source: "judge",
     remediation: JUDGE_REMEDIATION,
-    judge: { model, pTrue, effect: "none" },
+    judge: { model, pTrue: score, effect: "none" },
   };
 }
 

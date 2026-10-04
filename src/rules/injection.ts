@@ -228,6 +228,8 @@ export const injectionRules: readonly FileRule[] = [
   }),
   patternRule({
     id: "injection/terminal-social-engineering",
+    // Delivery tricks aimed at the user, which no judge probe asks about: the judge may confirm, never doubt.
+    hard: true,
     title: "Asks the user to paste a command into a terminal",
     category: "remote-execution",
     severity: "medium",

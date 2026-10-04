@@ -7,8 +7,11 @@ import type { FileKind, SkillBundle, SkillFile } from "../core/types";
  * `=== path ===` header, redacted. Never binaries, never symlink targets.
  */
 
-/** Characters of state sent per bundle. Over this, the bundle is skipped, never truncated. */
-export const STATE_BUDGET = 24_000;
+/**
+ * Characters of state sent per bundle. Over this, the bundle is skipped, never truncated. At 24,000
+ * the judge never saw 29% of the benchmark's skills; at 96,000 it sees 90%, and jev answers them.
+ */
+export const STATE_BUDGET = 96_000;
 
 /** Reading order: what the agent acts on first, then what runs, then the rest. */
 const ORDER: Readonly<Partial<Record<FileKind, number>>> = { "skill-md": 0, script: 1, manifest: 2, markdown: 3, text: 4 };

@@ -1,3 +1,5 @@
+import { DEFAULT_CONFIG, loadConfig } from "../../config";
+import { describeSecondOpinions } from "../../second-opinions";
 import { applyOps } from "../../setup/apply";
 import { runCanaries } from "../../setup/canary";
 import { HARNESSES, type Harness, parseHarness, userHome } from "../../setup/harnesses";
@@ -119,6 +121,9 @@ async function finishInstall(plan: SetupPlan, io: CliIO, self: string, status: n
   const canaries = await runCanaries(plan.node.path, plan.script, io.env);
   io.stdout(`\n${renderCanaries(canaries)}`);
   const failed = canaries.some((c) => !c.ok);
+  const config = await loadConfig(undefined, io.env).catch(() => DEFAULT_CONFIG);
+  const opinions = await describeSecondOpinions(config, io.env);
+  io.stdout(`\nSecond opinions, on by default in every scan and install hook:\n${opinions.map((l) => `  - ${l}`).join("\n")}\n`);
   const steps = [
     ...(plan.harnesses.includes("codex")
       ? ["Codex: open Codex, run /hooks, and trust the skill-scanner entries (Codex skips them until then)."]

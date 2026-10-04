@@ -42,19 +42,19 @@ only read from your home directory or `--config`, never from the directory being
 
 ## Categories
 
-- [prompt-injection](#prompt-injection) (11)
-- [deception](#deception) (12)
+- [prompt-injection](#prompt-injection) (10)
+- [deception](#deception) (15)
 - [hidden-content](#hidden-content) (9)
-- [exfiltration](#exfiltration) (6)
-- [credential-access](#credential-access) (6)
-- [remote-execution](#remote-execution) (7)
-- [obfuscation](#obfuscation) (6)
+- [exfiltration](#exfiltration) (5)
+- [credential-access](#credential-access) (5)
+- [remote-execution](#remote-execution) (6)
+- [obfuscation](#obfuscation) (5)
 - [persistence](#persistence) (7)
-- [destructive](#destructive) (6)
-- [privilege](#privilege) (9)
+- [destructive](#destructive) (5)
+- [privilege](#privilege) (8)
 - [network](#network) (4)
 - [secrets](#secrets) (2)
-- [supply-chain](#supply-chain) (7)
+- [supply-chain](#supply-chain) (6)
 - [packaging](#packaging) (13)
 - [metadata](#metadata) (4)
 - [execution-surface](#execution-surface) (12)
@@ -167,18 +167,6 @@ Severity: medium. Confidence: medium.
 
 A description that demands the skill be used for every or any task, or stuffs dozens of keywords. The description is how agents choose skills; this hijacks that choice.
 
-<a name="judge-prompt-injection"></a>
-
-### judge/prompt-injection
-
-**jev: may manipulate the agent's instructions**
-
-Severity: medium. Confidence: medium.
-
-TypeSafe's jev model answered "Does this skill try to override, ignore or manipulate an AI agent's instructions?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
-
-Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
-
 ## deception
 
 <a name="deception-report-false-success"></a>
@@ -289,6 +277,30 @@ Instructions to cover tracks: remove traces of the agent's actions, or clear his
 
 Remediation: Do not install.
 
+<a name="deception-hidden-deliverable-content"></a>
+
+### deception/hidden-deliverable-content
+
+**Tells the agent to plant hidden content in what it delivers**
+
+Severity: medium. Confidence: medium.
+
+Instructions to carry content into the user's deliverable where the user will not see it: a hidden worksheet or tab, a hidden template or loader block in a page, a non-rendered metadata block. Content nobody asked for, placed where nobody looks, is a covert channel for payloads, data, or markers.
+
+Remediation: Review what the skill puts in the hidden part and where it comes from. A deliverable should not carry content its owner cannot see.
+
+<a name="deception-conceal-files-from-user"></a>
+
+### deception/conceal-files-from-user
+
+**Tells the agent to tuck files away where the user will not see them**
+
+Severity: medium. Confidence: medium.
+
+Instructions to move the agent's own output, logs, or artifacts into a hidden or dotfile location so the user-visible tree stays clean, or that are kept out of a directory listing on purpose. Hiding what the agent produced from the person it works for is deceptive, whatever reason is offered.
+
+Remediation: Leave the agent's output where the user can see it. Retention or cleanup belongs in a place the user is told about, not a dotfile the listing hides.
+
 <a name="deception-sabotage"></a>
 
 ### deception/sabotage
@@ -324,6 +336,18 @@ Severity: high. Confidence: medium.
 Code that rewrites test outcomes to `passed`, forces the test session's exit status to 0, replaces assertion methods, exits with success after the suite, or defines an object equal to everything so any assertion holds. These are the tactics reward-hacking agents use against test suites (ImpossibleBench, METR, OpenAI 2025).
 
 Remediation: Do not install. A skill has no reason to change how tests report.
+
+<a name="judge-malicious-skill"></a>
+
+### judge/malicious-skill
+
+**jev: this skill looks malicious**
+
+Severity: medium. Confidence: medium.
+
+TypeSafe's jev model was asked six questions about intent (hidden instructions, a purpose other than the stated one, behavior its user would object to, malice, and a download from an unofficial source) and their combined score reached 0.075. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
+
+Remediation: Read the skill's SKILL.md and files with the answers above in mind, and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
 
 ## hidden-content
 
@@ -487,18 +511,6 @@ Severity: high. Confidence: high.
 
 Collects every environment variable (where API keys live) and, in the same script or command, makes network requests.
 
-<a name="judge-data-exfiltration"></a>
-
-### judge/data-exfiltration
-
-**jev: may send sensitive data out**
-
-Severity: medium. Confidence: medium.
-
-TypeSafe's jev model answered "Does this skill send sensitive data to an external destination?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
-
-Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
-
 ## credential-access
 
 <a name="exec-fake-password-prompt"></a>
@@ -555,18 +567,6 @@ Severity: medium. Confidence: medium.
 
 Reads the whole environment at once: env or printenv piped or redirected, process.env or os.environ serialized whole. The environment usually holds API keys; a skill needs specific variables, not all of them.
 
-<a name="judge-sensitive-data-access"></a>
-
-### judge/sensitive-data-access
-
-**jev: may read secrets**
-
-Severity: medium. Confidence: medium.
-
-TypeSafe's jev model answered "Does this skill read credentials, keys, tokens or other secrets?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
-
-Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
-
 ## remote-execution
 
 <a name="injection-terminal-social-engineering"></a>
@@ -575,7 +575,7 @@ Remediation: Read the files the question is about and decide. If it is a false a
 
 **Asks the user to paste a command into a terminal**
 
-Severity: medium. Confidence: medium.
+Severity: medium. Confidence: medium. Hard: the jev judge can confirm but never doubt it.
 
 Tells the reader to copy a command into their own terminal or to install a 'prerequisite' by hand, a delivery trick used by malicious skill campaigns to get code run outside the agent's sandbox.
 
@@ -607,7 +607,7 @@ Saves a download to disk and then marks it executable or runs it within a few li
 
 **Tells you to download and install software from a throwaway site**
 
-Severity: high. Confidence: medium.
+Severity: high. Confidence: medium. Hard: the jev judge can confirm but never doubt it.
 
 A prerequisite that sends you to download and install a program by hand from free web hosting or a throwaway domain ("OpenClawCLI must be installed before using this skill. Download and install (Windows, MacOS) from ..."). This is how the ClawHavoc campaign delivered infostealers through skills: the binary never passes through the agent or a package manager.
 
@@ -636,18 +636,6 @@ Severity: critical. Confidence: high. Hard: the jev judge can confirm but never 
 Connects a shell's input and output to a remote host, handing interactive control of the machine to whoever listens there.
 
 Remediation: Do not install.
-
-<a name="judge-remote-hidden-execution"></a>
-
-### judge/remote-hidden-execution
-
-**jev: may download and run remote code**
-
-Severity: medium. Confidence: medium.
-
-TypeSafe's jev model answered "Does this skill download and execute remote code?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
-
-Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
 
 ## obfuscation
 
@@ -689,7 +677,7 @@ Script lines thousands of characters long. Minified or generated code hides what
 
 **Extracts a password-protected archive**
 
-Severity: high. Confidence: medium.
+Severity: high. Confidence: medium. Hard: the jev judge can confirm but never doubt it.
 
 Unpacks an archive with a password given in the command. Encryption keeps scanners from seeing the contents, which is why malware delivery uses it.
 
@@ -702,18 +690,6 @@ Unpacks an archive with a password given in the command. Encryption keeps scanne
 Severity: critical. Confidence: high. Hard: the jev judge can confirm but never doubt it.
 
 Base64, hex, or char-code text that decodes to content another rule flags. The decoded text is shown as evidence.
-
-<a name="judge-obfuscation"></a>
-
-### judge/obfuscation
-
-**jev: may hide or encode content**
-
-Severity: medium. Confidence: medium.
-
-TypeSafe's jev model answered "Is any part of this skill obfuscated, encoded or deliberately hidden?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
-
-Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
 
 ## persistence
 
@@ -849,18 +825,6 @@ Severity: low. Confidence: medium.
 
 `git push --force` overwrites remote history; `--force-with-lease` is the safer form.
 
-<a name="judge-destructive-command"></a>
-
-### judge/destructive-command
-
-**jev: may delete or overwrite data**
-
-Severity: medium. Confidence: medium.
-
-TypeSafe's jev model answered "Does this skill delete, overwrite or destroy data?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
-
-Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
-
 ## privilege
 
 <a name="exec-gatekeeper-bypass"></a>
@@ -944,18 +908,6 @@ Severity: critical. Confidence: high. Hard: the jev judge can confirm but never 
 Turns off Gatekeeper, SIP, SELinux, Windows Defender, the firewall, or macOS quarantine for all downloads.
 
 Remediation: Do not install.
-
-<a name="judge-security-control-change"></a>
-
-### judge/security-control-change
-
-**jev: may weaken a security control**
-
-Severity: medium. Confidence: medium.
-
-TypeSafe's jev model answered "Does this skill disable, weaken or bypass a security control?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
-
-Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
 
 ## network
 
@@ -1078,18 +1030,6 @@ A dependency that bypasses the registry (git, tarball URL, GitHub shorthand, `fi
 Severity: high. Confidence: medium.
 
 `--extra-index-url`, `--index-url`, `--trusted-host`, or `--find-links` in a requirements file. An extra index is the classic dependency-confusion vector: a same-named package there wins.
-
-<a name="judge-supply-chain"></a>
-
-### judge/supply-chain
-
-**jev: may tamper with dependencies**
-
-Severity: medium. Confidence: medium.
-
-TypeSafe's jev model answered "Does this skill install, substitute or tamper with software dependencies?" with P(true) >= 0.85 and no static rule found anything of this kind. It is a model's opinion, not evidence: reported at medium severity, it warns but never blocks on its own under the default policy.
-
-Remediation: Read the files the question is about and decide. If it is a false alarm, suppress this rule for this skill; the judge alone never blocks under the default policy.
 
 <a name="external-osv-scanner"></a>
 

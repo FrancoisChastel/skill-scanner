@@ -222,7 +222,7 @@ FAKEKEY="ts_e2e_$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 run env SKILL_SCANNER_HOME="$JH" TYPESAFE_API_KEY="$FAKEKEY" "$SS" scan "$HOME/fx/secret" "$HOME/fx/hidden" --format json --fail-on never
 jq -e '[.[].analyzers[] | select(.status=="ran")] | length > 0' <<<"$OUT" >/dev/null && ok "judge ran against the endpoint" || ko "judge ran" "$(jq -c '[.[].analyzers]' <<<"$OUT" 2>/dev/null || tail -3 <<<"$OUT")"
 jq -e '[.[].bundles[].findings[] | select(.judge != null)] | length > 0' <<<"$OUT" >/dev/null && ok "findings carry judge notes" || ko "judge notes" ""
-[ -s /tmp/jev.jsonl ] && jq -e -s 'all(.[]; (.body.questions | length) == 8 and all(.body.questions[]; .type == "choice"))' /tmp/jev.jsonl >/dev/null && ok "8 choice questions per request, no noul" || ko "question shape" "$(head -c 300 /tmp/jev.jsonl)"
+[ -s /tmp/jev.jsonl ] && jq -e -s 'all(.[]; (.body.questions | length) == 14 and all(.body.questions[]; .type == "choice"))' /tmp/jev.jsonl >/dev/null && ok "14 choice questions per request (8 review, 6 threat), no noul" || ko "question shape" "$(head -c 300 /tmp/jev.jsonl)"
 jq -e -s 'all(.[]; .hasAuth and .authScheme == "Bearer")' /tmp/jev.jsonl >/dev/null && ok "key sent as a bearer token" || ko "auth header" ""
 grep -qF "$KEY" /tmp/jev.jsonl && ko "skill secret redacted before sending" "raw key reached the judge" || ok "skill secret redacted before sending"
 grep -qF "$FAKEKEY" <<<"$OUT" && ko "API key never printed" "key in output" || ok "API key never printed"

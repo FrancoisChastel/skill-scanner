@@ -1,3 +1,4 @@
+import type { AnalyzerName, JudgeConfig } from "./config";
 import { analyzeBundle } from "./core/engine";
 import type { Rule } from "./core/rule";
 import { compareFindings, countBySeverity, DEFAULT_POLICY, type VerdictPolicy, verdictFor, worstVerdict } from "./core/severity";
@@ -5,9 +6,10 @@ import { isSuppressed, type Suppression } from "./core/suppress";
 import type { AnalyzerRun, BundleReport, Finding, ScanReport, SkillBundle } from "./core/types";
 import { type CollectLimits, collect, DEFAULT_LIMITS } from "./io/collect";
 import { BUILTIN_RULES } from "./rules";
+import { buildSecondOpinions } from "./second-opinions";
 import { TOOL_NAME, VERSION } from "./version";
 
-/** An optional second opinion on one bundle. It may confirm or doubt findings, and add its own. */
+/** A second opinion on one bundle. It may doubt findings, and add its own; it never drops one. */
 export interface BundleJudge {
   readonly name: string;
   review(bundle: SkillBundle, findings: readonly Finding[], signal?: AbortSignal): Promise<JudgeReview>;
@@ -29,6 +31,18 @@ export interface ExternalAnalyzer {
   run(root: string, signal?: AbortSignal): Promise<Finding[]>;
 }
 
+/**
+ * Second opinions as plain settings, for scans that cannot be handed objects (a scan worker): the
+ * judge per its mode, and those of the named analyzers that are installed. Used only when neither
+ * `judge` nor `analyzers` is given. `quick` caps the judge for install hooks (src/second-opinions.ts).
+ */
+export interface SecondOpinions {
+  readonly judge: JudgeConfig;
+  readonly analyzers: readonly AnalyzerName[];
+  readonly semgrepConfig?: string;
+  readonly quick?: boolean;
+}
+
 /** Something that scans a directory the way `scanPath` does (in-process, or in a worker). */
 export type TargetScanner = (target: string, opts: ScanOptions) => Promise<ScanReport>;
 
@@ -39,6 +53,7 @@ export interface ScanOptions {
   readonly suppressions?: readonly Suppression[];
   readonly judge?: BundleJudge;
   readonly analyzers?: readonly ExternalAnalyzer[];
+  readonly secondOpinions?: SecondOpinions;
   /** Only report on skills with these names (case-insensitive); other bundles are dropped. */
   readonly onlySkills?: readonly string[];
   /** What to call the target in the report. Defaults to the path. */
@@ -60,7 +75,12 @@ export async function scanPath(target: string, opts: ScanOptions = {}): Promise<
   const rules = opts.rules ?? BUILTIN_RULES;
   const policy = opts.policy ?? DEFAULT_POLICY;
   const analyzerRuns: AnalyzerRun[] = [];
-  const external = await runAnalyzers(root, opts.analyzers ?? [], analyzerRuns, opts.signal);
+  const built =
+    opts.judge === undefined && opts.analyzers === undefined && opts.secondOpinions
+      ? await buildSecondOpinions(opts.secondOpinions)
+      : undefined;
+  const judge = opts.judge ?? built?.judge;
+  const external = await runAnalyzers(root, opts.analyzers ?? built?.analyzers ?? [], analyzerRuns, opts.signal);
   let suppressed = 0;
   const reports: BundleReport[] = [];
 
@@ -69,10 +89,10 @@ export async function scanPath(target: string, opts: ScanOptions = {}): Promise<
       ...analyzeBundle(bundle, { rules }),
       ...external.filter((f) => ownerOf(f.location.file, bundles) === bundle).map((f) => ({ ...f, bundle: bundle.name })),
     ];
-    if (opts.judge) {
-      const review = await safeReview(opts.judge, bundle, findings, opts.signal);
+    if (judge) {
+      const review = await safeReview(judge, bundle, findings, opts.signal);
       findings = [...review.findings];
-      recordRun(analyzerRuns, opts.judge.name, review.status, review.detail);
+      recordRun(analyzerRuns, judge.name, review.status, review.detail);
     }
     const kept = findings.filter((f) => {
       if (isSuppressed(f, bundle.digest, opts.suppressions ?? [])) {
