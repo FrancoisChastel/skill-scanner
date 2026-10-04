@@ -57,6 +57,8 @@ Four held-out bundles were read before the split was fixed, while looking at wha
 
 The test split and the held-out corpora: 250 malicious and 851 benign skills, with the released rules and judge. The same configurations before tuning are compared split by split under [Tuning](#tuning).
 
+![At one glance: skill-scanner with jev catches 79% of malicious skills, up from 50% before tuning, against 41% for Cisco's scanner and 77% for SkillSpector, with 10.1% of harmless skills flagged, 0.65 s a skill and $0.28 per 1,000 skills; and what the 1,101 skills are](./benchmark-scorecard.png)
+
 ![Every configuration: malicious skills caught, benign skills wrongly flagged, and time and cost per skill](./benchmark.png)
 
 ![Malicious skills caught against benign skills wrongly flagged, and time and money for 1,000 skills](./benchmark-tradeoff.png)
@@ -215,6 +217,8 @@ Verdict moves on the same bundles, relative to `static`. A bundle is flagged whe
 
 Both the rules and the judge's questions were tuned the way [skill-factory](https://github.com/FrancoisChastel/skill-factory) tunes a skill: read the training split's failures, propose a general change, score it, and keep it only if it beats the current best on validation. Test and held-out skills were scored once, after both were frozen. Every judge number here is at the 96,000-character budget, before and after alike, so the comparison isolates the questions: at that budget the released questions caught 27% of unseen malicious skills at 2.4% false flags, against 71% at 0.6% after.
 
+![Before and after skill-factory on the skills tuning never read: jev alone from 27% to 71% of malicious skills caught, rules and jev from 50% to 78%, the rules alone unchanged at 40%; false flags down for jev](./benchmark-improvement.png)
+
 ![skill-factory's loop took jev from 29% to 81% of malicious skills caught on validation; the rules moved from 55% to 57%](./benchmark-evolution.png)
 
 ![Before and after tuning, on each split](./benchmark-tuning.png)
@@ -308,6 +312,7 @@ bun scripts/benchmark-report.ts after=<unseen> before=<unseen-before> --out docs
 bun scripts/benchmark-tuning.ts <before> <results> --out docs/benchmark.md
 # figures, in the image that has IBM Plex: docker build -t skill-scanner-figures -f scripts/benchmark-figures.Dockerfile scripts
 python3 scripts/benchmark-figures.py <unseen> <timing> scripts/benchmark-rounds.json docs
+python3 scripts/benchmark-headline.py docs/benchmark.md docs   # the scorecard and the before/after, from the tables above
 python3 scripts/benchmark-plot.py <unseen> docs/benchmark.png --timing <timing>
 python3 scripts/benchmark-plot.py <unseen> docs/benchmark-tradeoff.png --style value --timing <timing>
 python3 scripts/benchmark-plot.py <results> docs/benchmark-tuning.png --style tuning --before <before> --map <splits.json>
