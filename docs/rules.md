@@ -43,7 +43,7 @@ only read from your home directory or `--config`, never from the directory being
 ## Categories
 
 - [prompt-injection](#prompt-injection) (10)
-- [deception](#deception) (15)
+- [deception](#deception) (16)
 - [hidden-content](#hidden-content) (9)
 - [exfiltration](#exfiltration) (5)
 - [credential-access](#credential-access) (5)
@@ -300,6 +300,18 @@ Severity: medium. Confidence: medium.
 Instructions to move the agent's own output, logs, or artifacts into a hidden or dotfile location so the user-visible tree stays clean, or that are kept out of a directory listing on purpose. Hiding what the agent produced from the person it works for is deceptive, whatever reason is offered.
 
 Remediation: Leave the agent's output where the user can see it. Retention or cleanup belongs in a place the user is told about, not a dotfile the listing hides.
+
+<a name="deception-planted-path-directive"></a>
+
+### deception/planted-path-directive
+
+**Tells the agent to act on a file someone may have planted outside the skill**
+
+Severity: medium. Confidence: medium. Hard: the jev judge can confirm but never doubt it.
+
+An instruction conditioned on a file existing at an absolute path outside the skill, the user's project and the user's own configuration (under /root, /app, /home, /tmp and the like), telling the agent to treat it as context or requirements, run it, or carry it into its answer. Whoever can place that file then steers the agent; nothing the user asked for depends on it.
+
+Remediation: Find out who puts that file there and why the skill trusts it. A skill should take its inputs from the user or its own files, not from whatever happens to sit at a fixed path.
 
 <a name="deception-sabotage"></a>
 
