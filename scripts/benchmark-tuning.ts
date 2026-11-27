@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
- * The before-and-after table of docs/benchmark.md's "Tuning" section: the static rules, jev alone
- * and static + jev, before and after tuning, on each split of src/benchmark/split.ts.
+ * The before-and-after table of docs/benchmark.md's "Tuning" section: the static rules, jev alone,
+ * static + jev, and the default with jev (static + gitleaks + jev) when both sides measured it, before
+ * and after tuning, on each split of src/benchmark/split.ts.
  *
  *   bun scripts/benchmark-tuning.ts <before-dir> <after-dir> [--root /corpora] [--out docs/benchmark.md]
  *
@@ -35,6 +36,7 @@ const CONFIGS = [
   ["static", "static rules"],
   ["jev-only", "jev alone"],
   ["jev", "static rules + jev"],
+  ["jev+gitleaks", "static rules + gitleaks + jev"],
 ] as const;
 const SPLITS: readonly (readonly [Split, string])[] = [
   ["train", "training"],
