@@ -21,7 +21,7 @@ import {
 import { runInherited } from "../../sources/spawn";
 import { bool, type FlagSpecs, formatFlags, parseArgs, str, UsageError } from "../args";
 import { type Command, EXIT } from "../command";
-import { type CliIO, useColor } from "../io";
+import { type CliIO, textWidth, useColor } from "../io";
 import { withRefusals } from "./guard";
 
 const DEFAULT_SKILLS_CLI: readonly string[] = ["npx", "-y", "skills@1"];
@@ -95,8 +95,9 @@ async function runAdd(argv: readonly string[], io: CliIO): Promise<number> {
       scanner: isolatedScanner(),
     });
     // stdout carries our report, unless the skills CLI was asked for JSON on stdout.
+    const width = textWidth(io);
     (skillsArgs.json ? io.stderr : io.stdout)(
-      formatReport(report, flags.format, { color: parsed.flags.color === false ? false : useColor(io) }),
+      formatReport(report, flags.format, { color: parsed.flags.color === false ? false : useColor(io), ...(width ? { width } : {}) }),
     );
     if (!(await mayInstall(report, flags, io))) return EXIT.findings;
     const delegated = [...cli, "add", spec.kind === "local" ? spec.path! : skillsArgs.source, ...skillsArgs.rest];

@@ -4,6 +4,8 @@ export interface CliIO {
   readonly stderr: (text: string) => void;
   /** Whether stdout is a terminal (colors, spinners, prompts). */
   readonly isTTY: boolean;
+  /** Width of the terminal on stdout, when it is one. */
+  readonly columns?: number;
   readonly env: NodeJS.ProcessEnv;
   readonly cwd: string;
   /** Read all of stdin (hooks receive their event there). */
@@ -31,6 +33,7 @@ export function processIO(): CliIO {
       process.stderr.write(t);
     },
     isTTY: Boolean(process.stdout.isTTY),
+    ...(process.stdout.columns ? { columns: process.stdout.columns } : {}),
     env: process.env,
     cwd: process.cwd(),
     readStdin: async () => {
@@ -58,4 +61,12 @@ export function useColor(io: Pick<CliIO, "isTTY" | "env">): boolean {
   if (io.env.FORCE_COLOR && io.env.FORCE_COLOR !== "0") return true;
   if (io.env.NO_COLOR !== undefined && io.env.NO_COLOR !== "") return false;
   return io.isTTY && io.env.TERM !== "dumb";
+}
+
+/** Lines of human-readable output stay this narrow even on a wider terminal. */
+export const MAX_TEXT_WIDTH = 100;
+
+/** Width to wrap text output to: the terminal's, up to MAX_TEXT_WIDTH; undefined (the default) when not a terminal. */
+export function textWidth(io: Pick<CliIO, "isTTY" | "columns">): number | undefined {
+  return io.isTTY && io.columns && io.columns > 0 ? Math.min(MAX_TEXT_WIDTH, io.columns) : undefined;
 }
