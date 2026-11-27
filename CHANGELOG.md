@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-27
+
+### Added
+
+- `deception/planted-path-directive` (medium, hard evidence): an instruction conditioned on a file existing at an absolute path outside the skill, the project and the user's configuration ("if `/root/...` exists, treat it as context, run it, attach it to the answer"). Whoever can place that file steers the agent. Found by skill-factory's second round on the benchmark's training split; jev never doubts it, since its instruction-override question does not speak to it (it answered under 0.05 for 31 of the rule's 76 findings).
+- `scripts/benchmark-corpora.ts` fetches the benchmark's corpora at pinned commits and writes the manifest, so a run can be repeated; the corpora behind 0.4.0's numbers were not pinned. `scripts/judge-lab-score.ts` replays the released threat score (`"threat"` in a policy), and `confirmAt` and `adding` are optional.
+
+### Changed
+
+- The jev judge reads skills over 96,000 characters instead of skipping them (`src/judge/state.ts`, `buildWindows`). The text is sent in windows of 96,000 characters, at most eight, cut between files and, inside a file, after a line break, never dropped; every window opens with the SKILL.md, or its frontmatter when the SKILL.md is long, or its first 24,000 characters when even the frontmatter is, so padding the description cannot strip it. The threat score is the most threatening window's, and the finding says which window and files carried it. A static finding is doubted only when every window was read and none sees its capability; past eight windows, nothing is doubted. A skill that fits in one window is sent exactly as before. Windows are sent four at a time; one failed window fails the review and cancels the requests still in flight.
+- A request jev refuses as over its token limit (`max_tokens_exceeded`, or `context_length_exceeded` from a gateway) is sent again in windows half the size, down to 24,000 characters: dense text passes the character budget and is still refused. The refusal is recognised from its error code alone; the response body is never echoed.
+- The terminal report is easier to read. Each skill opens with a verdict badge (red BLOCK, yellow WARN, green PASS) and its counts, then its findings grouped by file, the file with the most severe finding first: severity, what the rule catches and its id, what was found, and the quoted line behind a line-number gutter, with a blank line between findings. A summary closes the report: skills scanned by verdict, findings by severity, the policy, suppressions, the analyzers that ran, and the next steps. Lines follow the terminal's width up to 100 columns. Piped output and `--no-color` keep the same layout as plain text, with the badge in brackets (`[BLOCK]`). The text format is for people; scripts should read `--format json`.
+- `setup` is colored in a terminal (what it creates in green, removals and warnings in yellow, failures in red, section titles in bold), and wraps its lists and long plan lines to the terminal instead of breaking words at its edge. Its plain output is unchanged.
+- The jev figures quoted by the scan tip, `setup` and `doctor` follow the current benchmark: 83% of malicious skills flagged with jev against 44% without it, for about $0.0007 a skill (they said 78% against 40%, for $0.0003).
+- `docs/demo.gif` is re-recorded with the new report and colored `setup`, and its hook scene prints the decision and the reason Claude Code receives.
+
 ## [0.4.0] - 2026-10-04
 
 ### Added
