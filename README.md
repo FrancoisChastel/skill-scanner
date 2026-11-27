@@ -1,10 +1,26 @@
-# skill-scanner
+<h1 align="center">skill-scanner</h1>
 
-[![CI](https://github.com/FrancoisChastel/skill-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/FrancoisChastel/skill-scanner/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@french-castle/skill-scanner)](https://www.npmjs.com/package/@french-castle/skill-scanner)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+<p align="center"><strong>Scan Agent Skills before your coding agent installs them.</strong></p>
 
-Scan Agent Skills before your coding agent installs them.
+<p align="center">
+  With jev, it catches <strong>83%</strong> of malicious skills it has never seen, nearly twice as many as its rules alone,<br>
+  wrongly blocks <strong>3 harmless skills in 853</strong>, and costs <strong>$0.66 per 1,000 skills</strong>.
+</p>
+
+<p align="center">
+  <a href="https://github.com/FrancoisChastel/skill-scanner/actions/workflows/ci.yml"><img src="https://github.com/FrancoisChastel/skill-scanner/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@french-castle/skill-scanner"><img src="https://img.shields.io/npm/v/@french-castle/skill-scanner" alt="npm"></a>
+  <a href="https://www.npmjs.com/package/@french-castle/skill-scanner"><img src="https://img.shields.io/node/v/@french-castle/skill-scanner" alt="node"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license: MIT"></a>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> &middot;
+  <a href="#how-well-it-works">How well it works</a> &middot;
+  <a href="#install-gating">Install gating</a> &middot;
+  <a href="./docs/benchmark.md">Benchmark</a> &middot;
+  <a href="./DESIGN.md">Design</a>
+</p>
 
 ![skill-scanner blocking a malicious skill, then the Claude Code hook denying its install automatically](./docs/demo.gif)
 
