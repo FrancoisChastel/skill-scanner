@@ -259,9 +259,9 @@ The OpenCode plugin and the Pi extension are exported as `@french-castle/skill-s
 
 ## Status and limits
 
-Early. The rules were calibrated on about 3,600 public and locally installed skills and on public malicious test sets ([docs/evaluation.md](./docs/evaluation.md)): 4 of the benign skills block, each for a pattern worth a look; all 30 samples of the ClawHavoc wave in MaliciousSkillBench block, as do the Trail of Bits and scanner-bypass samples. Attacks written in plain prose are what the rules miss most; the judge catches most of them ([docs/benchmark.md](./docs/benchmark.md)). What it does not do:
+Early. skill-scanner is built to run with jev: on 264 malicious and 853 harmless skills that played no part in tuning, the rules, gitleaks, and jev together flag 83% of the malicious skills and wrongly block 3 of the harmless ones ([docs/benchmark.md](./docs/benchmark.md)). The rules on their own were calibrated on about 3,600 public and locally installed skills and on public malicious test sets ([docs/evaluation.md](./docs/evaluation.md)): 4 of the benign skills block, each for a pattern worth a look; all 30 samples of the ClawHavoc wave in MaliciousSkillBench block, as do the Trail of Bits and scanner-bypass samples. What it does not do:
 
-- The rules do not understand intent. A skill that asks for something harmful in ordinary words, matching no pattern, passes unless the judge flags it, and the judge only warns, and reads at most eight windows of 96,000 characters of a skill.
+- Without jev, it does not read intent. The rules match patterns, so a skill that asks for something harmful in plain words passes them; reading what a skill is trying to do is jev's job, and it takes what is caught from 44% to 83%. With jev, about one malicious skill in six still goes unflagged, and what jev finds is a warning: blocking stays the rules' decision.
 - It is not a sandbox. A skill you trust runs with your permissions; use your harness's permission system and sandbox for what must never happen.
 - Some paths have no hook: `/plugin install` inside Claude Code, claude.ai-synced skills, updates you run in your own terminal without `guard`, and the git marketplaces Codex refreshes at startup are caught after they land.
 - Harness options that disable hooks or plugins disable it too.
