@@ -2,9 +2,14 @@
 
 <p align="center"><strong>Scan Agent Skills before your coding agent installs them.</strong></p>
 
+<h3 align="center">
+  Catches more malicious skills than NVIDIA's and Cisco's scanners,<br>
+  wrongly blocks 16 times fewer harmless ones, and runs about five times faster.
+</h3>
+
 <p align="center">
-  With jev, it catches <strong>83%</strong> of malicious skills it has never seen, nearly twice as many as its rules alone,<br>
-  wrongly blocks <strong>3 harmless skills in 853</strong>, and costs <strong>$0.66 per 1,000 skills</strong>.
+  With jev, on 1,117 skills no tuning ever read: <strong>83%</strong> of malicious skills caught, against 75% for SkillSpector and 44% for Cisco's skill-scanner;<br>
+  <strong>3</strong> harmless skills blocked in 853, against 266 and 50; <strong>0.62 s</strong> a skill, against 2.9 to 3.4 s. <a href="./docs/benchmark.md">How it was measured</a>
 </p>
 
 <p align="center">
