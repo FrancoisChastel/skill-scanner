@@ -1,12 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runTool } from "../../src/analyzers/run";
 import {
   DEFAULT_SEMGREP_CONFIG,
   engineOf,
   isRegistryConfig,
   parseSemgrepOutput,
   resolveSemgrepConfig,
+  STACK_HARD_LIMIT_KB,
   semgrepArgs,
+  semgrepCommand,
   semgrepDriver,
 } from "../../src/analyzers/semgrep";
 import { DEFAULT_CONFIG } from "../../src/config";
@@ -111,6 +116,46 @@ describe("parseSemgrepOutput", () => {
     expect(() => parseSemgrepOutput("<html>", ROOT)).toThrow(/semgrep produced malformed JSON/);
     expect(() => parseSemgrepOutput('{"results": 3}', ROOT)).toThrow(/results is not an array/);
   });
+});
+
+describe("the engine's stack limit (semgrep#11979)", () => {
+  test("on Linux the engine starts through /bin/sh, with itself and its arguments as positional parameters", () => {
+    const c = semgrepCommand("/opt/semgrep/bin/semgrep", ["scan", "--json"], "linux");
+
+    expect(c.command).toBe("/bin/sh");
+    expect(c.args[0]).toBe("-c");
+    expect(c.args.slice(2)).toEqual(["/opt/semgrep/bin/semgrep", "scan", "--json"]);
+    expect(c.args[1]).not.toContain("/opt/semgrep");
+  });
+
+  test("elsewhere the engine starts directly", () => {
+    for (const platform of ["darwin", "win32"] as const)
+      expect(semgrepCommand("semgrep", ["scan"], platform)).toEqual({ command: "semgrep", args: ["scan"] });
+  });
+
+  test.skipIf(process.platform === "win32")(
+    "the engine gets every argument verbatim, and a finite stack hard limit when it was unlimited",
+    async () => {
+      // Arrange: an engine that prints its stack hard limit, then each argument on its own line.
+      const dir = await mkdtemp(join(tmpdir(), "ss-semgrep-stack-"));
+      const engine = join(dir, "semgrep");
+      await writeFile(engine, `#!/bin/sh\nulimit -H -s\nfor a in "$@"; do printf '%s\\n' "$a"; done\n`);
+      await chmod(engine, 0o755);
+      const args = ["scan", "a b", "it's", "$HOME", "; rm -rf /", '"quoted"'];
+      const before = (await runTool("/bin/sh", ["-c", "ulimit -H -s"])).stdout.trim();
+
+      // Act
+      const c = semgrepCommand(engine, args, "linux");
+      const r = await runTool(c.command, c.args);
+      await rm(dir, { recursive: true, force: true });
+
+      // Assert
+      const [limit, ...received] = r.stdout.trimEnd().split("\n");
+      expect(r.code).toBe(0);
+      expect(received).toEqual(args);
+      expect(limit).toBe(before === "unlimited" ? String(STACK_HARD_LIMIT_KB) : before);
+    },
+  );
 });
 
 describe("semgrep invocation", () => {

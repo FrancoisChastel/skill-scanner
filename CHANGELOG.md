@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- semgrep failed on Linux when it was installed under Python 3.15, which `uv tool install semgrep` picks now: Python 3.15 reports an unlimited stack limit as a huge number, semgrep derives its engine's stack from it, and the engine died at startup ("the engine was killed", whatever the memory; [semgrep#11979](https://github.com/semgrep/semgrep/issues/11979)). On Linux, skill-scanner now starts semgrep with a finite stack hard limit (3,000,000 KB) when it was unlimited, which gives the engine the same stack it gets on Python 3.14. This is what failed the weekly end-to-end suite from November 2.
+
 ## [0.5.0] - 2026-11-27
 
 ### Added
