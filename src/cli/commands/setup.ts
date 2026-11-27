@@ -4,11 +4,11 @@ import { applyOps } from "../../setup/apply";
 import { runCanaries } from "../../setup/canary";
 import { HARNESSES, type Harness, parseHarness, userHome } from "../../setup/harnesses";
 import { planErrors, planOps, planSetup, type SetupPlan } from "../../setup/index";
-import { renderApply, renderCanaries, renderPlan } from "../../setup/render";
+import { renderApply, renderCanaries, renderList, renderPlan } from "../../setup/render";
 import { SetupError, selfCommand } from "../../setup/runtime";
 import { bool, parseArgs, UsageError } from "../args";
 import { type Command, EXIT } from "../command";
-import type { CliIO } from "../io";
+import { type CliIO, textWidth, useColor } from "../io";
 
 const flags = {
   project: {
@@ -82,7 +82,8 @@ async function execute(plan: SetupPlan, io: CliIO, opts: { dryRun: boolean; yes:
     );
     return EXIT.error;
   }
-  io.stdout(renderPlan(plan, home));
+  const color = useColor(io);
+  io.stdout(renderPlan(plan, home, color, textWidth(io)));
   const ops = planOps(plan);
   const refused = planErrors(plan).length > 0;
   const status = refused ? EXIT.error : EXIT.ok;
@@ -107,7 +108,7 @@ async function execute(plan: SetupPlan, io: CliIO, opts: { dryRun: boolean; yes:
     }
   }
   const result = await applyOps(ops);
-  io.stdout(`\n${renderApply(result, home)}`);
+  io.stdout(`\n${renderApply(result, home, color)}`);
   if (result.failed) return EXIT.error;
   if (plan.mode === "uninstall") {
     io.stdout("Restart any running coding agent so it drops the removed hooks. Backups (*.skill-scanner.bak) were left in place.\n");
@@ -119,11 +120,12 @@ async function execute(plan: SetupPlan, io: CliIO, opts: { dryRun: boolean; yes:
 async function finishInstall(plan: SetupPlan, io: CliIO, self: string, status: number): Promise<number> {
   if (!plan.node) return status;
   const canaries = await runCanaries(plan.node.path, plan.script, io.env);
-  io.stdout(`\n${renderCanaries(canaries)}`);
+  const color = useColor(io);
+  io.stdout(`\n${renderCanaries(canaries, color)}`);
   const failed = canaries.some((c) => !c.ok);
   const config = await loadConfig(undefined, io.env).catch(() => DEFAULT_CONFIG);
   const opinions = await describeSecondOpinions(config, io.env);
-  io.stdout(`\nSecond opinions, on by default in every scan and install hook:\n${opinions.map((l) => `  - ${l}`).join("\n")}\n`);
+  io.stdout(`\n${renderList("Second opinions, on by default in every scan and install hook:", opinions, color, textWidth(io))}`);
   const steps = [
     ...(plan.harnesses.includes("codex")
       ? ["Codex: open Codex, run /hooks, and trust the skill-scanner entries (Codex skips them until then)."]
@@ -132,7 +134,7 @@ async function finishInstall(plan: SetupPlan, io: CliIO, self: string, status: n
     `Check the installation any time: ${self} doctor`,
     `Undo: ${self} setup --uninstall (edited files also keep a .skill-scanner.bak copy of their original)`,
   ];
-  io.stdout(`\nNext:\n${steps.map((s) => `  - ${s}`).join("\n")}\n`);
+  io.stdout(`\n${renderList("Next:", steps, color, textWidth(io))}`);
   if (failed) {
     io.stderr(`\nskill-scanner setup: the canary failed, so the hooks may not protect you yet. Run \`${self} doctor\` for details.\n`);
     return EXIT.error;

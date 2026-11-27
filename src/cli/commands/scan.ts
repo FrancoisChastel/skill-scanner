@@ -6,12 +6,13 @@ import { isSeverity } from "../../core/severity";
 import type { ScanReport, Severity, Verdict } from "../../core/types";
 import { createJudge as defaultCreateJudge } from "../../judge";
 import { formatJson, formatReports, isReportFormat, oneLineSummary, type ReportFormat, type ReportOptions } from "../../report";
+import { palette, wrap } from "../../report/style";
 import { type BundleJudge, type ExternalAnalyzer, type ScanOptions, scanPath } from "../../scan";
 import { scanSource as defaultScanSource, isRemoteSource } from "../../sources";
 import { TOOL_NAME } from "../../version";
 import { bool, type FlagSpecs, list, parseArgs, str, UsageError } from "../args";
 import { type Command, EXIT } from "../command";
-import { type CliIO, useColor } from "../io";
+import { type CliIO, textWidth, useColor } from "../io";
 
 type FailOn = "block" | "warn" | "never";
 const FAIL_ON: readonly FailOn[] = ["block", "warn", "never"];
@@ -114,8 +115,20 @@ function parseSettings(argv: readonly string[]): Settings {
 /** Shown after a text scan when the judge is on by default but has no key. Figures: docs/benchmark.md. */
 export const JEV_HINT =
   `Tip: ${TOOL_NAME} runs TypeSafe's jev judge by default once it has a key, and then flags about twice as many ` +
-  "malicious skills (78% against 40% for the rules alone in the benchmark), for about $0.0003 a skill. " +
+  "malicious skills (83% against 44% without it in the benchmark), for about $0.0007 a skill. " +
   'Set TYPESAFE_API_KEY (https://typesafe.ai); `"judge": {"enabled": false}` in the config hides this tip.';
+
+/** "  Tip: ..." wrapped to the terminal, the label highlighted and the rest dimmed. */
+export function formatHint(hint: string, out: RenderOptions): string {
+  const c = palette(out.color);
+  const indent = "  ";
+  const [first = "", ...rest] = wrap(hint, out.width ?? 100, indent);
+  const label = "Tip:";
+  const head = first.startsWith(`${indent}${label}`)
+    ? `${indent}${c.accent(label)}${c.dim(first.slice(indent.length + label.length))}`
+    : c.dim(first);
+  return [head, ...rest.map(c.dim)].join("\n");
+}
 
 function reaches(verdict: Verdict, failOn: FailOn): boolean {
   if (failOn === "never") return false;
@@ -196,9 +209,21 @@ async function scanTarget(target: string, opts: ScanOptions, io: CliIO, deps: Sc
   }
 }
 
-function render(reports: readonly ScanReport[], prefixes: ReadonlyMap<ScanReport, string>, s: Settings, color: boolean, config: Config) {
+interface RenderOptions {
+  readonly color: boolean;
+  readonly width?: number;
+}
+
+function render(
+  reports: readonly ScanReport[],
+  prefixes: ReadonlyMap<ScanReport, string>,
+  s: Settings,
+  config: Config,
+  out: RenderOptions,
+) {
   const opts: ReportOptions = {
-    color,
+    color: out.color,
+    ...(out.width ? { width: out.width } : {}),
     minSeverity: s.minSeverity,
     verbose: s.verbose,
     policy: { blockAt: config.blockAt, warnAt: config.warnAt },
@@ -241,7 +266,8 @@ async function run(argv: readonly string[], io: CliIO, deps: ScanDeps): Promise<
 
   const toFile = s.output !== undefined;
   const color = !toFile && s.format === "text" && !s.noColor && useColor(io);
-  const text = render(reports, prefixes, s, color, config);
+  const width = toFile ? undefined : textWidth(io);
+  const text = render(reports, prefixes, s, config, { color, ...(width ? { width } : {}) });
   if (s.output !== undefined) {
     const path = resolve(io.cwd, s.output);
     try {
@@ -256,7 +282,7 @@ async function run(argv: readonly string[], io: CliIO, deps: ScanDeps): Promise<
     io.stdout(text);
   }
   // Only for a person at a terminal: piped output and CI logs stay as they were.
-  if (hint && io.isTTY && s.format === "text" && !s.quiet) io.stderr(`\n${JEV_HINT}\n`);
+  if (hint && io.isTTY && s.format === "text" && !s.quiet) io.stderr(`\n${formatHint(JEV_HINT, { color, ...(width ? { width } : {}) })}\n`);
   return exit;
 }
 

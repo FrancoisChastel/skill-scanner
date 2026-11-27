@@ -62,7 +62,7 @@ async function judgeChecks(config: Config | undefined, ctx: CheckContext): Promi
         area,
         status: "skip",
         message:
-          "jev runs by default once it has a key, and then flags about twice as many malicious skills (78% against 40% for the rules alone); " +
+          "jev runs by default once it has a key, and then flags about twice as many malicious skills (83% against 44% without it); " +
           "without one, scans use the rules and gitleaks only",
         fix: "export TYPESAFE_API_KEY=<your key>   # from https://typesafe.ai",
       },

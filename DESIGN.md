@@ -1,6 +1,6 @@
 # skill-scanner design
 
-Status: v0.4.0, 2026-10-04 (npm `@french-castle/skill-scanner`). This document records what the scanner does, why it is built this way, and what it does not cover. Decisions are numbered in section 14 and kept current.
+Status: v0.5.0, 2026-11-27 (npm `@french-castle/skill-scanner`). This document records what the scanner does, why it is built this way, and what it does not cover. Decisions are numbered in section 14 and kept current.
 
 ## 1. What this is
 
@@ -97,7 +97,7 @@ jev answers typed questions about a state with calibrated probabilities, in a fe
 
 Evidence that shaped this, from Cisco's published measurements on MaliciousSkillBench: asked as single `noul` (yes/no probability) questions, jev's answers were inverted relative to the label (AUC 0.25 to 0.31). Asked as boolean `choice` questions with `true` and `false` options, reading the probability of `true`, the same model separated well: obfuscation AUC 0.977 and prompt injection 0.963 on one split, 0.908 and 0.881 on held-out test. The question type was the problem, not the model.
 
-So the judge asks fourteen `choice` questions in one request, over the skill's text files, redacted and with invisible characters made visible. Text over 96,000 characters is not sent at all: a model answering about text it never saw would be a fail-open. Two sets of questions, applied monotonically:
+So the judge asks fourteen `choice` questions in one request, over the skill's text files, redacted and with invisible characters made visible. A skill longer than 96,000 characters is sent in windows of that size, at most eight, cut between files and, inside a file, after a line break; every window opens with the SKILL.md, or with its frontmatter when the SKILL.md is long, or with its first 24,000 characters when even the frontmatter is (so padding the description cannot strip it), since the questions weigh what a skill does against what it promises. The skill's threat score is its most threatening window's. A model answering about text it never saw would be a fail-open, so a finding is doubted only when every window was read and none gives its probe 0.05 or more; past eight windows nothing is doubted, and the judge can only add its warning. Two sets of questions, applied monotonically:
 
 - Eight review probes (wording adapted from Cisco's, Apache-2.0) ask what the skill does: sends data out, deletes, reads secrets, changes a security control, and so on. A static finding whose matching probe is below 0.05 is doubted: confidence becomes low, which lowers its effective severity one step. Hard evidence (invisible tag characters, decode-and-execute, binaries, symlinks, encoded payloads, the delivery lures) and critical findings are never doubted. The review probes never add a finding: what they ask about is as common in benign skills as in malicious ones (on the benchmark's training split, the exfiltration question scored malicious skills below benign ones).
 - Six threat probes ask about intent and about the skill against its own description: hidden or unexplained instructions, anything unrelated to its stated purpose, a goal other than the described task, behavior its user would object to, plain malice, and a download from an unofficial source before first use. The threat score is half the mean of the first five plus half the sixth, from 0 to 1. At 0.075 or above, the judge adds one medium `judge/malicious-skill` finding naming the strongest answers. It warns; it never blocks alone.
@@ -145,7 +145,7 @@ Everything lives under `~/.skill-scanner` (override with `SKILL_SCANNER_HOME`): 
 
 ## 13. Privacy
 
-Offline by default. Fetching a remote source to scan it uses git or npm with the user's own credentials, exactly as the install would. The judge, when enabled, receives the skill's text files only, redacted, and never over the size budget; the API key is read from the environment and sent only to the provider's HTTPS endpoint, and redirects are refused so the key cannot be forwarded. External analyzers run locally; osv-scanner and registry semgrep rules contact their services, and are marked as networked in `doctor`.
+Offline by default. Fetching a remote source to scan it uses git or npm with the user's own credentials, exactly as the install would. The judge, when enabled, receives the skill's text files only, redacted, in windows of at most 96,000 characters and at most eight per skill; the API key is read from the environment and sent only to the provider's HTTPS endpoint, and redirects are refused so the key cannot be forwarded. External analyzers run locally; osv-scanner and registry semgrep rules contact their services, and are marked as networked in `doctor`.
 
 ## 14. Decisions log
 

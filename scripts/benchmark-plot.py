@@ -38,25 +38,25 @@ TOOL_NAMES = {"skillspector": "SkillSpector", "cisco": "Cisco", "gitleaks": "git
 # Rows in reading order, in groups; a configuration not in the results is skipped.
 GROUPS: list[tuple[str, list[str]]] = [
     ("skill-scanner", ["gitleaks", "jev+gitleaks", "static", "jev", "jev-only"]),
-    ("Each tool alone, without skill-scanner's rules", [f"{t}-only" for t in TOOLS]),
-    ("skill-scanner's rules + other tools", [t for t in TOOLS if t != "gitleaks"] + ["skillspector+gitleaks", "all-offline", "all-analyzers"]),
-    ("With the judge and tools", ["jev+skillspector", "jev+all"]),
+    ("Each tool alone, without static analysis", [f"{t}-only" for t in TOOLS]),
+    ("static analysis + other tools", [t for t in TOOLS if t != "gitleaks"] + ["skillspector+gitleaks", "all-offline", "all-analyzers"]),
+    ("With the general-classifier and tools", ["jev+skillspector", "jev+all"]),
 ]
 LABELS = {
-    "static": "rules only",
-    "jev": "rules + jev",
-    "jev-only": "jev alone",
+    "static": "static analysis only",
+    "jev": "static + general-classifier",
+    "jev-only": "general-classifier alone",
     **{f"{t}-only": f"{TOOL_NAMES[t]} alone" for t in TOOLS},
-    **{t: f"rules + {TOOL_NAMES[t]}" for t in TOOLS},
-    "skillspector+gitleaks": "rules + SkillSpector + gitleaks",
-    "all-offline": "rules + 3 offline tools",
-    "all-analyzers": "rules + 5 tools",
-    "jev+gitleaks": "rules + gitleaks + jev",
-    "jev+skillspector": "rules + jev + SkillSpector",
+    **{t: f"static + {TOOL_NAMES[t]}" for t in TOOLS},
+    "skillspector+gitleaks": "static + SkillSpector + gitleaks",
+    "all-offline": "static + 3 offline tools",
+    "all-analyzers": "static + 5 tools",
+    "jev+gitleaks": "static + gitleaks + general-classifier",
+    "jev+skillspector": "static + general-classifier + SkillSpector",
     "jev+all": "everything",
 }
 # The two configurations a user gets by default: without jev, and with it.
-TAGS = {"gitleaks": "default without jev", "jev+gitleaks": "default with jev"}
+TAGS = {"gitleaks": "default without general-classifier", "jev+gitleaks": "default with general-classifier"}
 
 INK = "#16181d"
 MUTED = "#6b7280"
@@ -311,7 +311,7 @@ def table_figure(arms: dict[str, dict], out: str, only: list[str] | None, note: 
     ax.set_xticks(ticks)
     ax.set_xticklabels([f"{t // 1000} s" if t >= 1000 else f"{t} ms" for t in ticks])
     ax.xaxis.set_minor_locator(matplotlib.ticker.NullLocator())
-    ax.set_title("Time per skill, and judge cost", loc="left", fontsize=10.5, fontweight="bold", color=INK, pad=10)
+    ax.set_title("Time per skill, and classifier cost", loc="left", fontsize=10.5, fontweight="bold", color=INK, pad=10)
 
     legend = [
         Patch(facecolor=CATCH, label="blocked: what the hooks deny"),
@@ -385,12 +385,12 @@ def scatter_figure(arms: dict[str, dict], out: str, only: list[str] | None, note
 
 # (arm, label, family): skill-scanner's own configurations in green, the judge's in teal, other tools in grey.
 VALUE = [
-    ("gitleaks", "skill-scanner", "ours"),
-    ("jev+gitleaks", "skill-scanner with jev", "jev"),
-    ("jev-only", "jev alone", "jev"),
+    ("gitleaks", "static analysis", "ours"),
+    ("jev+gitleaks", "static analysis with general-classifier", "jev"),
+    ("jev-only", "general-classifier alone", "jev"),
     ("cisco-only", "Cisco skill-scanner alone", "other"),
     ("skillspector-only", "NVIDIA SkillSpector alone", "other"),
-    ("all-offline", "skill-scanner + 3 offline tools", "other"),
+    ("all-offline", "static analysis + 3 offline tools", "other"),
 ]
 FAMILY = {"ours": "#1d4ed8", "jev": "#0f766e", "other": "#94a3b8"}
 # Where each label sits relative to its point, in points; chosen for these data, checked by eye.
@@ -415,7 +415,7 @@ def value_figure(arms: dict[str, dict], out: str, note: str | None) -> None:
     pts = {a: point(arms[a]) for a, _, _ in shown}
     p0 = next(iter(pts.values()))
     s, j = pts.get("gitleaks"), pts.get("jev+gitleaks")
-    title = (f"With jev, skill-scanner catches {pct(j.flagged)} of malicious skills it never saw, with fewer false alarms than without"
+    title = (f"With the general-classifier, skill-scanner catches {pct(j.flagged)} of malicious skills it never saw, with fewer false alarms than without"
              if s and j and j.fp_flagged <= s.fp_flagged else "What each approach catches, and what it costs")
     top = header(fig, 6.4, title, note or f"{p0.positives:,} malicious and {p0.negatives:,} benign skills, each scanned on its own.")
     gs = fig.add_gridspec(1, 2, width_ratios=[1.35, 1], wspace=0.34, left=0.06, right=0.985, top=top, bottom=0.13)
@@ -439,12 +439,13 @@ def value_figure(arms: dict[str, dict], out: str, note: str | None) -> None:
         ax.scatter(x, y, s=170 if big else 95, color=c, edgecolor="white", linewidth=1.5, zorder=5)
         dx, dy, ha = LABEL_AT.get(a, (10, 0, "left"))
         ax.annotate(f"{label}  {pct(p.flagged)}", (x, y), xytext=(dx, dy), textcoords="offset points", ha=ha, va="center",
-                    fontsize=9.4 if big else 8.6, color=INK if fam != "other" else MUTED, fontweight="bold" if big else "normal")
+                    fontsize=9.4 if big else 8.6, color=INK if fam != "other" else MUTED, fontweight="bold" if big else "normal",
+                    zorder=6, bbox={"boxstyle": "square,pad=0.15", "facecolor": "white", "edgecolor": "none", "alpha": 0.9})
     if s and j:
         ax.annotate("", xy=(j.fp_flagged * 100, j.flagged * 100 - 2.4), xytext=(s.fp_flagged * 100, s.flagged * 100 + 2.4),
                     arrowprops={"arrowstyle": "-|>", "color": "#0f766e", "linewidth": 1.6, "mutation_scale": 14}, zorder=4)
         mid = (s.flagged + j.flagged) / 2 * 100
-        ax.annotate(f"adding jev: {(j.flagged - s.flagged) * 100:+.0f} points caught,\n{(j.fp_flagged - s.fp_flagged) * 100:+.1f} points of false alarms",
+        ax.annotate(f"adding the general-classifier: {(j.flagged - s.flagged) * 100:+.0f} points caught,\n{(j.fp_flagged - s.fp_flagged) * 100:+.1f} points of false alarms",
                     (max(s.fp_flagged, j.fp_flagged) * 100, mid), xytext=(12, 0), textcoords="offset points", ha="left", va="center",
                     fontsize=8.6, color="#0f766e", fontweight="bold")
     ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:.0f}%"))
@@ -453,8 +454,8 @@ def value_figure(arms: dict[str, dict], out: str, note: str | None) -> None:
     ax.set_ylabel(f"Malicious skills caught   (n = {p0.positives:,})", fontsize=9.5, color=INK, labelpad=8)
     ax.set_title("Catch more, flag less: up and to the left is better", loc="left", fontsize=11, fontweight="bold", color=INK, pad=10)
     ax.legend(handles=[
-        Line2D([], [], marker="o", color=FAMILY["ours"], linestyle="none", markersize=8, label="skill-scanner's rules"),
-        Line2D([], [], marker="o", color=FAMILY["jev"], linestyle="none", markersize=8, label="with TypeSafe's jev"),
+        Line2D([], [], marker="o", color=FAMILY["ours"], linestyle="none", markersize=8, label="static analysis"),
+        Line2D([], [], marker="o", color=FAMILY["jev"], linestyle="none", markersize=8, label="with the general-classifier"),
         Line2D([], [], marker="o", color=FAMILY["other"], linestyle="none", markersize=8, label="other scanners"),
     ], loc="lower right", frameon=False, fontsize=8.2, title="caught = blocked or warned", title_fontsize=7.8)
 
@@ -491,7 +492,7 @@ def value_figure(arms: dict[str, dict], out: str, note: str | None) -> None:
 
 
 SPLITS = [("train", "training"), ("val", "validation"), ("test", "test"), ("held-out", "held-out corpora")]
-TUNED = [("static", "rules only"), ("jev-only", "jev alone"), ("jev", "rules + jev")]
+TUNED = [("static", "static analysis only"), ("jev-only", "general-classifier alone"), ("jev", "static + general-classifier")]
 
 
 def tuning_figure(after: dict[str, dict], before: dict[str, dict], split_of: dict[str, str], out: str) -> None:
@@ -499,7 +500,7 @@ def tuning_figure(after: dict[str, dict], before: dict[str, dict], split_of: dic
     fig.patch.set_facecolor(PAPER)
     top = header(fig, 5.3, "What tuning changed, on the skills it read and on the ones it never saw",
                  "Malicious skills flagged (bars), benign skills wrongly flagged (below). Tuned on training, kept only if better on validation; "
-                 "test and held-out read once, at the end.")
+                 "test and held-out read once per round.")
     fig.subplots_adjust(top=top, bottom=0.2, left=0.085, right=0.99, wspace=0.08)
     width = 0.36
     for ax, (arm, title) in zip(axes, TUNED):
@@ -527,7 +528,7 @@ def tuning_figure(after: dict[str, dict], before: dict[str, dict], split_of: dic
         ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:.0f}%"))
     axes[0].annotate("benign flagged:", (0, 0), xycoords=("axes fraction", "data"), xytext=(-4, -26), textcoords="offset points",
                      ha="right", fontsize=7.6, color=MUTED, annotation_clip=False)
-    fig.legend(handles=[Patch(facecolor="#cbd5e1", label="before tuning"), Patch(facecolor=CATCH, label="after tuning")],
+    fig.legend(handles=[Patch(facecolor="#cbd5e1", label="before skill-factory (v0.3.0)"), Patch(facecolor=CATCH, label="after skill-factory (now)")],
                loc="lower left", bbox_to_anchor=(0.012, 0.015), ncol=2, frameon=False, fontsize=8.5)
     fig.savefig(out, dpi=160, facecolor=PAPER)
     print(f"wrote {out}")

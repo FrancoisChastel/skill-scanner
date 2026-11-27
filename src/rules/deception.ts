@@ -308,6 +308,31 @@ const hiddenContent = deceptionRule({
   ],
 });
 
+/** Absolute directories outside the skill, the user's project and the user's own config: where a planted file waits. */
+const PLANTED_PATH = String.raw`(?:/root|/app|/home|/tmp|/opt|/srv|/var|/workspace|/data|/mnt)/[^\s\x60'"]{1,200}`;
+/** What the agent is told to do with that file: take it as context, run it, carry it into its answer. */
+const ACT_ON_IT = String.raw`(?:treat|use|run|execute|source|attach|include|keep|preserve|follow|apply|load|read|merge|honou?r|prefer|export|import|carry|copy|obey|it\s+is\s+(?:a|an|the))`;
+
+const plantedPath = deceptionRule({
+  id: "deception/planted-path-directive",
+  title: "Tells the agent to act on a file someone may have planted outside the skill",
+  severity: "medium",
+  confidence: "medium",
+  // jev reviews deception through its instruction-override question, and these lines add a step
+  // rather than override one: it answered under 0.05 for 31 of the 76 malicious skills this rule
+  // found on the benchmark, and the rule found no benign skill.
+  hard: true,
+  description:
+    "An instruction conditioned on a file existing at an absolute path outside the skill, the user's project and the user's own configuration (under /root, /app, /home, /tmp and the like), telling the agent to treat it as context or requirements, run it, or carry it into its answer. Whoever can place that file then steers the agent; nothing the user asked for depends on it.",
+  remediation:
+    "Find out who puts that file there and why the skill trusts it. A skill should take its inputs from the user or its own files, not from whatever happens to sit at a fixed path.",
+  patterns: [
+    re(
+      String.raw`\bif\s+\x60?${PLANTED_PATH}\x60?\s+(?:exists|is\s+present|is\s+available|is\s+there)\s{0,3}(?:[,;:\u2013\u2014-]|then)\s{0,3}(?:then\s+)?${ACT_ON_IT}\b`,
+    ),
+  ],
+});
+
 const concealFiles = deceptionRule({
   id: "deception/conceal-files-from-user",
   title: "Tells the agent to tuck files away where the user will not see them",
@@ -438,6 +463,7 @@ export const deceptionRules: readonly FileRule[] = [
   coverTracks,
   hiddenContent,
   concealFiles,
+  plantedPath,
   sabotage,
   swallowedFailure,
   riggedHarness,

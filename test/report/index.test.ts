@@ -16,7 +16,7 @@ describe("formatReport", () => {
     };
 
     // Assert
-    expect(outputs.text).toContain("BLOCK  helper");
+    expect(outputs.text).toContain("[BLOCK]  helper");
     expect(JSON.parse(outputs.json).schemaVersion).toBe(1);
     expect(JSON.parse(outputs.sarif).version).toBe("2.1.0");
     expect(outputs.markdown.startsWith("## skill-scanner blocked")).toBe(true);
@@ -27,7 +27,7 @@ describe("formatReport", () => {
 
     expect(JSON.parse(formatReports(reports, "sarif", { color: false })).runs).toHaveLength(2);
     expect(JSON.parse(formatReports(reports, "json", { color: false }))).toHaveLength(2);
-    expect(formatReports(reports, "text", { color: false })).toContain("No findings in 1 skill.");
+    expect(formatReports(reports, "text", { color: false })).toContain("Findings   none");
   });
 });
 

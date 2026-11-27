@@ -102,6 +102,36 @@ describe("transport safety", () => {
     expect(fake.calls).toHaveLength(1);
   });
 
+  for (const [name, body] of [
+    ["TypeSafe's", { detail: { error_type: "max_tokens_exceeded", note: `echo ${KEY}` } }],
+    ["an OpenAI-style", { error: { code: "context_length_exceeded", message: `echo ${KEY}` } }],
+  ] as const) {
+    test(`${name} token-limit refusal is named in fixed words and not retried; its body never reaches the detail`, async () => {
+      // Arrange
+      const fake = fakeFetch(() => jsonResponse(body, 400));
+
+      // Act
+      const review = await judgeWith(fake.fetch).review(makeBundle(), []);
+
+      // Assert
+      expect(review.status).toBe("failed");
+      expect(review.detail).toBe("jev via typesafe failed: the text is over the model's token limit");
+      expect(fake.calls.length).toBeGreaterThanOrEqual(1);
+    });
+  }
+
+  test("any other 400 is reported by its status alone", async () => {
+    // Arrange
+    const fake = fakeFetch(() => jsonResponse({ detail: { error_type: "invalid_question", note: `echo ${KEY}` } }, 400));
+
+    // Act
+    const review = await judgeWith(fake.fetch).review(makeBundle(), []);
+
+    // Assert
+    expect(review.detail).toBe("jev via typesafe failed: responded 400");
+    expect(fake.calls).toHaveLength(1);
+  });
+
   test("a network failure is retried, and its free text never reaches the detail", async () => {
     // Arrange
     const failing: FetchLike = async () => {

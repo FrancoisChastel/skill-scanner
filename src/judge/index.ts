@@ -8,11 +8,11 @@ import type { JudgeConfig } from "../config";
 import type { Finding, SkillBundle } from "../core/types";
 import type { BundleJudge, JudgeReview } from "../scan";
 import { VERSION } from "../version";
-import { applyScores } from "./apply";
+import { applyWindowScores } from "./apply";
 import { type FetchLike, JudgeError, postJson } from "./http";
 import { type ChoiceQuestion, probeQuestions, readModel, readScores, readTrueProbabilities, requestBody } from "./protocol";
 import { type JudgeSetup, OVERRIDE_KEY_ENV, resolveSetup } from "./providers";
-import { buildState } from "./state";
+import { buildWindows, MAX_WINDOWS, STATE_BUDGET } from "./state";
 
 export { DOUBT_BELOW, THREAT_AT, THREAT_RULE_ID, threatScore } from "./apply";
 export { type FetchLike, JudgeError, type JudgeErrorCode } from "./http";
@@ -20,7 +20,7 @@ export { INSTRUCTIONS, PROBE_ATTRIBUTION, PROBE_FOR_CATEGORY, PROBES, type Probe
 export { OVERRIDE_KEY_ENV, PROVIDERS, type ProviderName } from "./providers";
 
 export { JUDGE_RULES } from "./rules";
-export { STATE_BUDGET } from "./state";
+export { MAX_WINDOWS, STATE_BUDGET } from "./state";
 
 export const JUDGE_NAME = "jev";
 
@@ -118,22 +118,58 @@ async function reviewBundle(
 ): Promise<JudgeReview> {
   if (bundle.kind !== "skill" && bundle.kind !== "plugin")
     return { status: "skipped", detail: `only skills and plugins are judged; this is a ${bundle.kind} bundle`, findings };
-  const built = buildState(bundle);
-  if (!built.ok) return { status: "skipped", detail: built.reason, findings };
   const started = performance.now();
-  try {
-    const raw = await post(setup, deps, requestBody(setup.model, built.state, probeQuestions()), signal);
-    const scores = readScores(raw);
-    const model = readModel(raw, setup.model);
-    const ms = Math.round(performance.now() - started);
-    return {
-      status: "ok",
-      detail: `jev via ${setup.provider.name} (${model}), ${ms} ms`,
-      findings: applyScores(bundle, findings, scores, model),
-    };
-  } catch (e) {
-    return { status: "failed", detail: failureDetail(e, setup), findings };
+  // Characters are not tokens: dense text (code, data, other scripts) can pass the budget and still be
+  // refused as over the model's token limit. Such a skill is sent again in windows half the size.
+  for (let budget = STATE_BUDGET; ; budget /= 2) {
+    const built = buildWindows(bundle, budget, MAX_WINDOWS * (STATE_BUDGET / budget));
+    if (!built.ok) return { status: "skipped", detail: built.reason, findings };
+    try {
+      const raws = await askAll(setup, deps, built.windows, signal);
+      const windows = raws.map((raw, i) => ({ scores: readScores(raw), contents: built.contents[i] ?? [] }));
+      const model = readModel(raws[0], setup.model);
+      const ms = Math.round(performance.now() - started);
+      return {
+        status: "ok",
+        detail: `jev via ${setup.provider.name} (${model})${coverage(built.windows.length, built.needed, budget)}, ${ms} ms`,
+        findings: applyWindowScores(bundle, findings, windows, built.complete, model),
+      };
+    } catch (e) {
+      if (e instanceof JudgeError && e.code === "too_long" && budget / 2 >= SMALLEST_WINDOW) continue;
+      return { status: "failed", detail: failureDetail(e, setup), findings };
+    }
   }
+}
+
+/** The smallest window a refused skill is cut into: about 8,000 tokens even for dense text. */
+const SMALLEST_WINDOW = STATE_BUDGET / 4;
+
+/** Every window must answer: one failure fails the review, as a malformed answer does, and cancels the requests still in flight. */
+async function askAll(setup: JudgeSetup, deps: JudgeDeps, states: readonly string[], signal?: AbortSignal): Promise<unknown[]> {
+  const failed = new AbortController();
+  const cancel = signal ? AbortSignal.any([signal, failed.signal]) : failed.signal;
+  return inBatches(states, WINDOWS_AT_ONCE, (state) =>
+    post(setup, deps, requestBody(setup.model, state, probeQuestions()), cancel).catch((e: unknown) => {
+      failed.abort();
+      throw e;
+    }),
+  );
+}
+
+/** Requests in flight at once for one long skill. */
+const WINDOWS_AT_ONCE = 4;
+
+async function inBatches<T, R>(items: readonly T[], size: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (let at = 0; at < items.length; at += size) out.push(...(await Promise.all(items.slice(at, at + size).map(run))));
+  return out;
+}
+
+function coverage(sent: number, needed: number, budget: number): string {
+  const size = budget < STATE_BUDGET ? ` of ${budget} characters (jev's token limit)` : "";
+  if (needed === 1 && !size) return "";
+  if (sent === needed) return `, ${sent} window${sent === 1 ? "" : "s"}${size}`;
+  return `, first ${sent} of ${needed} windows${size}; no finding was doubted`;
 }
 
 function post(setup: JudgeSetup, deps: JudgeDeps, body: string, signal?: AbortSignal): Promise<unknown> {

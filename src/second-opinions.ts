@@ -64,8 +64,8 @@ export async function describeSecondOpinions(config: Config, env: NodeJS.Process
     const d = describeJudge(config.judge, env);
     lines.push(
       d.problem
-        ? "jev: runs as soon as it has a key, and then flags about twice as many malicious skills (78% against 40% for the rules alone), " +
-            "for about $0.0003 a skill. Without one, scans stay offline. export TYPESAFE_API_KEY=<your key>   # from https://typesafe.ai"
+        ? "jev: runs as soon as it has a key, and then flags about twice as many malicious skills (83% against 44% without it), " +
+            "for about $0.0007 a skill. Without one, scans stay offline. export TYPESAFE_API_KEY=<your key>   # from https://typesafe.ai"
         : `jev: on, with the key in $${d.keyEnv || "(none needed)"}. It warns, and never blocks on its own.`,
     );
   }

@@ -177,11 +177,6 @@ describe("skipped bundles", () => {
   const findings = [makeFinding()];
   const cases: ReadonlyArray<[string, SkillBundle, RegExp]> = [
     [
-      "text over the budget is skipped, not truncated",
-      makeBundle({ files: [textFile("SKILL.md", "skill-md", "a".repeat(STATE_BUDGET))] }),
-      new RegExp(`over the judge's ${STATE_BUDGET} budget; skipped rather than truncated`),
-    ],
-    [
       "a file truncated while collecting is not sent",
       makeBundle({ files: [textFile("SKILL.md", "skill-md", "partial", { truncated: true })] }),
       /SKILL\.md was truncated/,

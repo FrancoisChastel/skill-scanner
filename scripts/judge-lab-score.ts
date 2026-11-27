@@ -11,9 +11,12 @@
  *
  * <policy.json>: {
  *   "questions": "<set.json>",                 the question set the lab asked (relative to the policy file)
- *   "doubtBelow": 0.05, "confirmAt": 0.5,
+ *   "doubtBelow": 0.05, "confirmAt": 0.5,       confirmAt is optional: the released judge does not confirm
  *   "family": { "<category>": "<question id>" }, which question reviews findings of each category
- *   "adding": { "<question id>": 0.85 }          the questions that may add a finding, and their thresholds
+ *   "adding": { "<question id>": 0.85 },         optional: questions that may add a finding alone, and their thresholds
+ *   "threat": { "intent": ["<id>", ...], "lure": "<id>", "at": 0.075 }
+ *                                               optional: the released judge's own finding (src/judge/apply.ts),
+ *                                               added when half the intent questions' mean plus half the lure reaches `at`
  * }
  * --questions        also print each question's separation (AUC) and recall at a 1% and 2% false-flag rate, per split
  * --failures <split> list jev-alone misses and false flags in that split, with every question's P(true)
@@ -47,9 +50,10 @@ interface LabRow {
 interface Policy {
   readonly questions: string;
   readonly doubtBelow: number;
-  readonly confirmAt: number;
+  readonly confirmAt?: number;
   readonly family: Readonly<Record<string, string>>;
-  readonly adding: Readonly<Record<string, number>>;
+  readonly adding?: Readonly<Record<string, number>>;
+  readonly threat?: { readonly intent: readonly string[]; readonly lure: string; readonly at: number };
 }
 type QuestionSet = Record<string, { instructions: string; true: string; false: string }>;
 
@@ -98,6 +102,18 @@ const verdictOf = (fs: readonly { severity: Severity; confidence: Confidence }[]
   return fs.some((f) => at(f, DEFAULT_POLICY.warnAt)) ? "warn" : "pass";
 };
 
+const adding = Object.entries(policy.adding ?? {});
+
+/** The released threat score (src/judge/apply.ts threatScore), or undefined when an answer is missing. */
+function threatOf(r: LabRow): number | undefined {
+  if (!policy.threat) return undefined;
+  const intent = policy.threat.intent.map((id) => p(r, id));
+  const lure = p(r, policy.threat.lure);
+  if (lure === undefined || intent.some((x) => x === undefined)) return undefined;
+  return ((intent as number[]).reduce((a, b) => a + b, 0) / intent.length + lure) / 2;
+}
+const threatens = (r: LabRow): boolean => policy.threat !== undefined && (threatOf(r) ?? 0) >= policy.threat.at;
+
 /** The judge's rules (src/judge/apply.ts), replayed with this policy's questions and thresholds. */
 function withJudge(r: LabRow): Verdict {
   if (!r.stateHash) return verdictOf(r.findings);
@@ -106,18 +122,17 @@ function withJudge(r: LabRow): Verdict {
     const pt = id === undefined ? undefined : p(r, id);
     if (pt === undefined) return f;
     if (pt < policy.doubtBelow && f.severity !== "critical" && !f.hard) return { ...f, confidence: "low" as Confidence };
-    if (pt >= policy.confirmAt) return { ...f, confidence: raiseConfidence(f.confidence) };
+    if (policy.confirmAt !== undefined && pt >= policy.confirmAt) return { ...f, confidence: raiseConfidence(f.confidence) };
     return f;
   });
   const covered = new Set(r.findings.map((f) => policy.family[f.category]));
-  const added = Object.entries(policy.adding)
-    .filter(([id, t]) => !covered.has(id) && (p(r, id) ?? 0) >= t)
-    .map(() => ({ severity: "medium" as Severity, confidence: "medium" as Confidence }));
-  return verdictOf([...reviewed, ...added]);
+  const medium = { severity: "medium" as Severity, confidence: "medium" as Confidence };
+  const added = adding.filter(([id, t]) => !covered.has(id) && (p(r, id) ?? 0) >= t).map(() => medium);
+  return verdictOf([...reviewed, ...added, ...(threatens(r) ? [medium] : [])]);
 }
 
-/** jev alone: flagged (warn) when any adding question reaches its threshold. */
-const jevAlone = (r: LabRow): Verdict => (Object.entries(policy.adding).some(([id, t]) => (p(r, id) ?? 0) >= t) ? "warn" : "pass");
+/** jev alone: flagged (warn) when the threat score or any adding question reaches its threshold. */
+const jevAlone = (r: LabRow): Verdict => (threatens(r) || adding.some(([id, t]) => (p(r, id) ?? 0) >= t) ? "warn" : "pass");
 
 function line(name: string, split: Split, verdict: (r: LabRow) => Verdict): string {
   const rs = rows.filter((r) => r.split === split);

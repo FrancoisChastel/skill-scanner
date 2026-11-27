@@ -15,6 +15,7 @@ scripts/benchmark-figures.py, in its image (scripts/benchmark-figures.Dockerfile
 from __future__ import annotations
 
 import importlib.util
+import math
 import os
 import re
 import sys
@@ -33,6 +34,7 @@ DEFAULT = "jev+gitleaks"  # the default with jev
 RIVALS = (("cisco-only", "Cisco skill-scanner"), ("skillspector-only", "NVIDIA SkillSpector"))
 TEAL = "#0d9488"  # benchmark-figures.py's jev teal, one step brighter: clears the chroma floor of a categorical palette
 BAND = "#e6f4f1"
+BEFORE, AFTER = "v0.3.0", "now"  # the two sides the Tuning table compares: the last release before skill-factory, and today
 ARROW, TIMES = "\u2192", "\u00d7"
 
 
@@ -141,7 +143,7 @@ def seconds(cell: str) -> float:
 def scanners(markdown: str) -> list[Scanner]:
     detection = table_rows(markdown, "#### Detection at the warn threshold")
     cost = table_rows(markdown, "#### Cost and time")
-    rows = [(DEFAULT, "skill-scanner with jev", "after skill-factory (v0.4.0)", True)] + [(a, n, "offline mode", False) for a, n in RIVALS]
+    rows = [(DEFAULT, "static analysis with\ngeneral-classifier", "after skill-factory", True)] + [(a, n, "offline mode", False) for a, n in RIVALS]
     out = []
     for arm, name, mode, ours in rows:
         tp, fp, fn, tn = (int(x) for x in detection[arm][:4])
@@ -151,8 +153,8 @@ def scanners(markdown: str) -> list[Scanner]:
 
 
 def changes(table: dict, markdown: str, blue: str) -> list[Change]:
-    rows = [("jev alone", "jev alone", "jev-only (derived)", TEAL), ("static rules + jev", "rules + jev", "jev", TEAL),
-            ("static rules", "rules alone", "static", blue)]
+    rows = [("jev alone", "general-classifier\nalone", "jev-only (derived)", TEAL), ("static rules + jev", "static analysis\n+ classifier", "jev", TEAL),
+            ("static rules", "static analysis\nalone", "static", blue)]
     released = table_rows(markdown, "#### Detection at the warn threshold")
     out = []
     for config, name, arm, color in rows:
@@ -231,8 +233,9 @@ def scorecard_figure(rows: list[Scanner], before: Rates, style, out: str) -> Non
                                  facecolor=BAND, edgecolor="none", zorder=-1))
     centers = [top + rows_h * (len(rows) - i - 0.5) / len(rows) for i in range(len(rows))]
     for y, s in zip(centers, rows):
-        fig.text(0.045, y + 0.012, s.name, fontsize=14, fontweight="semibold" if s.ours else "regular", color=style.INK, va="bottom")
-        fig.text(0.045, y + 0.004, s.mode, fontsize=11, color=style.MUTED, va="top")
+        drop = 0.022 * s.name.count("\n")  # a name on two lines starts lower, to stay inside its row
+        fig.text(0.045, y + 0.012 - drop, s.name, fontsize=14, fontweight="semibold" if s.ours else "regular", color=style.INK, va="bottom")
+        fig.text(0.045, y + 0.004 - drop, s.mode, fontsize=11, color=style.MUTED, va="top")
     head_y = top + rows_h + 0.06
     columns = [
         (0.225, 0.255, "Malicious skills caught", "higher is better", lambda s: s.caught, lambda v: f"{v:.0f}%", 125,
@@ -240,7 +243,7 @@ def scorecard_figure(rows: list[Scanner], before: Rates, style, out: str) -> Non
         (0.52, 0.155, "Harmless skills flagged", "false alarms, lower is better", lambda s: s.flagged,
          lambda v: f"{v:.1f}%", 62, f"was {before.flagged_pct:.1f}%"),
         (0.715, 0.11, "Time per skill", "same skills, same machine", lambda s: s.seconds,
-         lambda v: f"{v:.2f} s" if v < 1 else f"{v:.1f} s", 3.1, None),
+         lambda v: f"{v:.2f} s" if v < 1 else f"{v:.1f} s", max(r.seconds for r in rows) * 1.4, None),
     ]
     for x, w, title, hint, value, fmt, xmax, was in columns:
         column_header(fig, style, x, head_y, title, hint)
@@ -253,7 +256,7 @@ def scorecard_figure(rows: list[Scanner], before: Rates, style, out: str) -> Non
              "that tuning never read", fontsize=13, fontweight="semibold", color=style.INK, va="bottom")
     tiles = [
         (f"{before.malicious}", "malicious skills", "227 from MaliciousSkillBench, a research\nbenchmark of malicious agent "
-         "skills; 23 from\nSnyk's ToxicSkills, Cisco, Trail of Bits, a\nscanner-bypass sample and our own tests."),
+         "skills; 37 from\nCisco's test skills, Snyk's ToxicSkills,\nTrail of Bits and a scanner-bypass sample."),
         (f"{before.benign}", "harmless skills", "Real published skills from 24 public\nsources: Microsoft, OpenAI, "
          "Anthropic,\nHugging Face, Cloudflare, Sentry, HashiCorp,\nTrail of Bits and others."),
         ("0", "seen during tuning", "A held-back test split plus 7 whole\ncollections left out of tuning. Each skill\n"
@@ -271,7 +274,7 @@ def scorecard_figure(rows: list[Scanner], before: Rates, style, out: str) -> Non
 def tile(fig, style, box: tuple[float, float, float, float], value: str, label: str, note: str, color: str) -> None:
     x, y, _, h = box
     frame(fig, style, box)
-    fig.text(x + 0.018, y + h - 0.035, value, fontsize=28, fontweight="semibold", color=color, va="top")
+    fig.text(x + 0.018, y + h - 0.035, value, fontsize=28 if len(value) <= 11 else 25, fontweight="semibold", color=color, va="top")
     fig.text(x + 0.018, y + h - 0.118, label, fontsize=13, fontweight="medium", color=style.INK, va="top")
     fig.text(x + 0.018, y + 0.03, note, fontsize=11, color=style.MUTED, va="bottom", linespacing=1.35)
 
@@ -297,43 +300,52 @@ def dumbbell(ax, style, rows: list[Change], value, fmt, xmax: float, ticks: Sequ
         ax.scatter(a, y, s=135, color=c.color, edgecolor=style.PAPER, linewidth=2, zorder=4)
         if names:
             ax.text(-xmax * 0.04, y, c.name, ha="right", va="center", fontsize=13.5, color=style.INK,
-                    fontweight="semibold" if c.name == "jev alone" else "regular")
+                    fontweight="semibold" if c is rows[0] else "regular")
 
 
 def legend(fig, style, x: float, y: float) -> None:
     fig.add_artist(Line2D([x], [y], marker="o", markersize=10, markerfacecolor=style.PAPER, markeredgecolor=style.FAINT,
                           markeredgewidth=2.2, linestyle="none", transform=fig.transFigure))
-    fig.text(x + 0.012, y, "before: the released rules and jev questions (v0.3.0)", fontsize=11, color=style.INK, va="center")
-    x2 = x + 0.39
+    fig.text(x + 0.012, y, f"before skill-factory ({BEFORE})", fontsize=11, color=style.INK, va="center")
+    x2 = x + 0.25
     for dx, color in ((0, TEAL), (0.013, style.OURS)):
         fig.add_artist(Line2D([x2 + dx], [y], marker="o", markersize=10.5, color=color, markeredgecolor=style.PAPER,
                               linestyle="none", transform=fig.transFigure))
-    fig.text(x2 + 0.025, y, "after the skill-factory loop (v0.4.0)", fontsize=11, color=style.INK, va="center")
+    fig.text(x2 + 0.025, y, f"after skill-factory ({AFTER})", fontsize=11, color=style.INK, va="center")
+
+
+def alarm_change(before: int, after: int) -> str:
+    if after < before:
+        return f"{before / max(after, 1):.0f}{TIMES} fewer false alarms" if after else "no false alarms left"
+    return "false alarms unchanged" if after == before else f"{after - before} more false alarms"
 
 
 def improvement_figure(rows: list[Change], ours: Scanner, style, out: str) -> None:
     h = 7.8
     fig = style.setup_figure(13.5, h)
     jev, both = rows[0], rows[1]
-    style.heading(fig, f"skill-factory took jev from {pct(jev.before.caught_pct)} to {pct(jev.after.caught_pct)} of malicious skills caught",
-                  f"Before and after the loop, on {jev.after.malicious} malicious and {jev.after.benign} harmless skills tuning never read. "
-                  "Same 96,000-character budget on both sides.", h)
+    style.heading(fig, f"skill-factory took the general-classifier from {pct(jev.before.caught_pct)} to {pct(jev.after.caught_pct)} caught",
+                  f"{BEFORE}, the release before skill-factory, against {AFTER}, on the same {jev.after.malicious} malicious and "
+                  f"{jev.after.benign} harmless skills tuning never read.", h)
     tiles = [
-        (f"{pct(jev.before.caught_pct)} {ARROW} {pct(jev.after.caught_pct)}", "malicious skills jev catches",
-         f"{jev.after.caught_pct / jev.before.caught_pct:.1f}{TIMES} as many: {jev.before.caught} {ARROW} {jev.after.caught}\nof {jev.after.malicious}", TEAL),
-        (f"{pct(jev.before.flagged_pct)} {ARROW} {pct(jev.after.flagged_pct)}", "harmless skills jev flags",
-         f"{jev.before.flagged_pct / jev.after.flagged_pct:.0f}{TIMES} fewer false alarms:\n{jev.before.flagged} {ARROW} {jev.after.flagged} of {jev.after.benign}", style.INK),
-        (f"{pct(both.before.caught_pct)} {ARROW} {pct(both.after.caught_pct)}", "caught by rules + jev",
-         f"false flags {pct(both.before.flagged_pct, 1)} {ARROW} {pct(both.after.flagged_pct, 1)};\nrules alone barely moved", style.INK),
-        (f"${ours.usd_per_1000:.2f}", "per 1,000 skills scanned", f"{ours.seconds:.2f} s a skill, with jev's\nAPI at list price", style.INK),
+        (f"{pct(jev.before.caught_pct)} {ARROW} {pct(jev.after.caught_pct)}", "caught by general-classifier",
+         f"{jev.after.caught - jev.before.caught:+d} skills: {jev.before.caught} {ARROW} {jev.after.caught}\nof {jev.after.malicious}", TEAL),
+        (f"{pct(jev.before.flagged_pct, 1)} {ARROW} {pct(jev.after.flagged_pct, 1)}", "classifier's false alarms",
+         f"{alarm_change(jev.before.flagged, jev.after.flagged)}:\n{jev.before.flagged} {ARROW} {jev.after.flagged} of {jev.after.benign}", style.INK),
+        (f"{pct(both.before.caught_pct)} {ARROW} {pct(both.after.caught_pct)}", "caught by static + classifier",
+         f"false flags {pct(both.before.flagged_pct, 1)} {ARROW} {pct(both.after.flagged_pct, 1)};\nstatic alone {pct(rows[2].before.caught_pct)} {ARROW} {pct(rows[2].after.caught_pct)}", style.INK),
+        (f"${ours.usd_per_1000:.2f}", "per 1,000 skills scanned", f"{ours.seconds:.2f} s a skill, with the\nclassifier's API at list price", style.INK),
     ]
     w, gap = 0.21, 0.0167
     for i, t in enumerate(tiles):
         tile(fig, style, (0.045 + i * (w + gap), 0.55, w, 0.235), *t)
+    # The false-flag axis reaches the highest value on either side, in steps of 5 points.
+    worst = max(max(c.before.flagged_pct, c.after.flagged_pct) for c in rows)
+    alarm_max = 5 * math.ceil(worst * 1.15 / 5)
     panels = [
         ("Malicious skills caught", "higher is better", lambda r: r.caught_pct, pct, 100, [0, 25, 50, 75, 100], (0.17, 0.155, 0.37, 0.26)),
-        ("Harmless skills wrongly flagged", "lower is better", lambda r: r.flagged_pct, lambda x: pct(x, 1), 15, [0, 5, 10, 15],
-         (0.665, 0.155, 0.255, 0.26)),
+        ("Harmless skills wrongly flagged", "lower is better", lambda r: r.flagged_pct, lambda x: pct(x, 1), alarm_max,
+         list(range(0, alarm_max + 1, 5)), (0.665, 0.155, 0.255, 0.26)),
     ]
     for i, (title, hint, value, fmt, xmax, ticks, box) in enumerate(panels):
         dumbbell(fig.add_axes(box), style, rows, value, fmt, xmax, ticks, names=i == 0)
@@ -356,10 +368,12 @@ def main() -> None:
     with open(markdown_path) as fh:
         markdown = fh.read()
     tuning = parse_tuning(markdown)
-    before, _ = unseen(tuning, "static rules + jev")
+    # The scorecard's row is the default with jev, so its "was" is the same configuration when the table has it.
+    default = "static rules + gitleaks + jev"
+    before, _ = unseen(tuning, default if (default, "test") in tuning else "static rules + jev")
     rows = scanners(markdown)
     setattr(style, "SOURCE", ("Cisco skill-scanner and NVIDIA SkillSpector ran in their free offline modes (no LLM). "
-                    "\"was\": v0.3.0's rules and jev questions at the same budget. Tables: docs/benchmark.md"))
+                    f"\"was\": {BEFORE}, before skill-factory: same configuration, same skills. Tables: docs/benchmark.md"))
     scorecard_figure(rows, before, style, os.path.join(out, "benchmark-scorecard.png"))
     setattr(style, "SOURCE", "skill-scanner benchmark: test split + held-out corpora, each skill scanned on its own. Tables: docs/benchmark.md, Tuning")
     improvement_figure(changes(tuning, markdown, style.OURS), rows[0], style, os.path.join(out, "benchmark-improvement.png"))

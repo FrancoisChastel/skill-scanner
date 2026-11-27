@@ -82,7 +82,7 @@ describe("defaults: the judge with a key, gitleaks when installed", () => {
     const h = harness({ isTTY: true });
     expect(await scan(["skills/ok"], h)).toBe(0);
     expect(h.err()).toContain("Tip:");
-    expect(h.err()).toContain("78% against 40%");
+    expect(h.err()).toContain("83% against 44%");
     expect(h.err()).toContain("TYPESAFE_API_KEY");
   });
 
@@ -132,8 +132,8 @@ describe("scan command", () => {
 
     // Assert
     expect(code).toBe(0);
-    expect(h.out()).toContain("PASS   ok  skills/ok");
-    expect(h.out()).toContain("No findings in 1 skill.");
+    expect(h.out()).toContain("[PASS]   ok  skills/ok");
+    expect(h.out()).toContain("  Findings   none\n");
     expect(h.err()).toBe("");
   });
 
@@ -143,15 +143,15 @@ describe("scan command", () => {
     const code = await scan(["skills/mal"], h);
 
     expect(code).toBe(1);
-    expect(h.out()).toContain("BLOCK  mal  skills/mal");
-    expect(h.out()).toContain("HIGH      exec/download-and-run  scripts/setup.sh:2");
+    expect(h.out()).toContain("[BLOCK]  mal  skills/mal");
+    expect(h.out()).toContain("  scripts/setup.sh\n    \u25CF HIGH      Downloads code and runs it  exec/download-and-run\n");
   });
 
   test("scans the current directory when no target is given", async () => {
     const h = harness({ cwd: join(root, "skills/ok") });
 
     expect(await scan([], h)).toBe(0);
-    expect(h.out()).toContain("No findings in 1 skill.");
+    expect(h.out()).toContain("  Findings   none\n");
   });
 
   test("--fail-on never exits 0 even when the verdict is block", async () => {
@@ -221,7 +221,7 @@ describe("scan command", () => {
 
     expect(code).toBe(2);
     expect(h.err()).toContain("skill-scanner scan: owner/missing-repo: cannot fetch owner/missing-repo: offline test");
-    expect(h.out()).toContain("PASS   ok");
+    expect(h.out()).toContain("[PASS]   ok");
   });
 
   test("reports a missing local path that is not a source", async () => {
@@ -294,7 +294,7 @@ describe("scan command", () => {
     const code = await scan(["skills/mal", "--config", config], h);
 
     expect(code).toBe(0);
-    expect(h.out()).toContain("suppressed");
+    expect(h.out()).toContain("  Suppressed 1 finding, by ignore entries in your config\n");
   });
 
   test("--skill limits the report to the named skills", async () => {

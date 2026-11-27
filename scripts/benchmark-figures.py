@@ -41,12 +41,12 @@ MONEY = "#b45309"
 
 # (arm, label, color, light color): the same order in every chart.
 ROWS = [
-    ("jev+gitleaks", "skill-scanner with jev", JEV, JEV_LIGHT),
-    ("gitleaks", "skill-scanner", OURS, OURS_LIGHT),
-    ("jev-only", "jev alone", JEV, JEV_LIGHT),
+    ("jev+gitleaks", "static analysis with\ngeneral-classifier", JEV, JEV_LIGHT),
+    ("gitleaks", "static analysis", OURS, OURS_LIGHT),
+    ("jev-only", "general-classifier alone", JEV, JEV_LIGHT),
     ("cisco-only", "Cisco skill-scanner", OTHER, OTHER_LIGHT),
     ("skillspector-only", "NVIDIA SkillSpector", OTHER, OTHER_LIGHT),
-    ("all-offline", "skill-scanner + 3 tools", OTHER, OTHER_LIGHT),
+    ("all-offline", "static analysis + 3 tools", OTHER, OTHER_LIGHT),
 ]
 HERO = "jev+gitleaks"
 SOURCE = "skill-scanner benchmark: skills held out from tuning, each scanned on its own. Method and tables: docs/benchmark.md"
@@ -205,7 +205,7 @@ def bars(
 def caught_figure(results: dict[str, Result], out: str) -> None:
     fig = setup_figure(12, 6.75)
     hero, base = results[HERO], results["gitleaks"]
-    heading(fig, f"skill-scanner with jev catches {pct(hero.caught)} of malicious skills",
+    heading(fig, f"{pct(hero.caught)} of malicious skills caught with the general-classifier",
             f"Of {hero.malicious} malicious skills it never saw during tuning (higher is better). "
             "Dark: blocked at install. Light: flagged for a look.", 6.75)
     ax = fig.add_axes((0.3, 0.1, 0.62, 0.66))
@@ -216,8 +216,8 @@ def caught_figure(results: dict[str, Result], out: str) -> None:
 def alarms_figure(results: dict[str, Result], out: str) -> None:
     fig = setup_figure(12, 6.75)
     hero, base = results[HERO], results["gitleaks"]
-    heading(fig, f"With jev, fewer harmless skills are flagged: {pct(hero.false_flagged, 1)} against {pct(base.false_flagged, 1)}",
-            f"Of {hero.harmless} harmless skills (lower is better). Dark: blocked at install, {pct(hero.false_blocked, 2)} with or without jev.", 6.75)
+    heading(fig, f"The general-classifier also cuts false alarms: {pct(hero.false_flagged, 1)} against {pct(base.false_flagged, 1)}",
+            f"Of {hero.harmless} harmless skills (lower is better). Dark: blocked at install, {pct(hero.false_blocked, 2)} with or without the general-classifier.", 6.75)
     ax = fig.add_axes((0.3, 0.1, 0.62, 0.66))
     worst = max(r.false_flagged for r in results.values())
     bars(ax, results, lambda r: r.false_blocked, lambda r: r.false_flagged, lambda r: pct(r.false_flagged, 1), worst * 1.22, alarm=True)
@@ -228,8 +228,8 @@ def cost_figure(results: dict[str, Result], out: str) -> None:
     fig = setup_figure(12, 6.75)
     hero = results[HERO]
     tools = [results[a] for a in ("cisco-only", "skillspector-only") if a in results]
-    heading(fig, f"skill-scanner with jev checks 1,000 skills in {minutes(hero.ms)} for ${hero.usd_per_1000:.2f}",
-            f"Time to scan 1,000 skills one at a time (lower is better), and jev's API cost. "
+    heading(fig, f"1,000 skills checked in {minutes(hero.ms)} for ${hero.usd_per_1000:.2f}, general-classifier included",
+            f"Time to scan 1,000 skills one at a time, and the classifier's API cost. "
             f"Cisco's scanner and SkillSpector take {minutes(min(t.ms for t in tools))} to {minutes(max(t.ms for t in tools))}.", 6.75)
     ax = fig.add_axes((0.3, 0.1, 0.62, 0.66))
     worst = max(r.ms for r in results.values())
@@ -253,13 +253,13 @@ def summary_figure(results: dict[str, Result], out: str) -> None:
     h = 7.6
     fig = setup_figure(13.5, h)
     hero, base = results[HERO], results["gitleaks"]
-    heading(fig, f"skill-scanner with jev catches {pct(hero.caught)} of malicious agent skills",
+    heading(fig, f"skill-scanner catches {pct(hero.caught)} of malicious agent skills",
             f"Measured on {hero.malicious} malicious and {hero.harmless} harmless skills it never saw during tuning, "
-            "against skill-scanner without jev and other scanners.", h)
+            "against static analysis alone and other scanners.", h)
     tiles = [
-        (pct(hero.caught), "malicious skills caught", f"{pct(base.caught)} without jev", JEV),
-        (pct(hero.false_blocked, 2), "harmless skills blocked", f"{round(hero.false_blocked * hero.harmless / 100)} of {hero.harmless};\njev never blocks on its own", INK),
-        (pct(hero.false_flagged, 1), "harmless skills flagged", f"{pct(base.false_flagged, 1)} without jev:\njev also clears false alarms", INK),
+        (pct(hero.caught), "malicious skills caught", f"{pct(base.caught)} with static analysis alone", JEV),
+        (pct(hero.false_blocked, 2), "harmless skills blocked", f"{round(hero.false_blocked * hero.harmless / 100)} of {hero.harmless};\nthe classifier never blocks alone", INK),
+        (pct(hero.false_flagged, 1), "harmless skills flagged", f"{pct(base.false_flagged, 1)} with static analysis alone:\nthe classifier clears some", INK),
         (f"${hero.usd_per_1000:.2f}", "per 1,000 skills", f"{hero.ms / 1000:.2f} s a skill;\nother scanners take ~{min(results[a].ms for a in ('cisco-only', 'skillspector-only')) / 1000:.0f} s", INK),
     ]
     w, gap, x0, y0, th = 0.21, 0.0167, 0.045, 0.52, 0.25
@@ -269,7 +269,7 @@ def summary_figure(results: dict[str, Result], out: str) -> None:
     panels = [
         ("Malicious skills caught", lambda r: r.caught, lambda r: pct(r.caught), 118, False),
         ("Harmless skills flagged", lambda r: r.false_flagged, lambda r: pct(r.false_flagged, 1), 62, True),
-        ("Time for 1,000 skills", lambda r: r.ms / 60, lambda r: minutes(r.ms), 52, False),
+        ("Time for 1,000 skills", lambda r: r.ms / 60, lambda r: minutes(r.ms), max(r.ms for r in compare.values()) / 60 * 1.3, False),
     ]
     for i, (title, val, lab, xmax, alarm) in enumerate(panels):
         ax = fig.add_axes((0.205 + i * 0.27, 0.09, 0.17, 0.32))
@@ -314,7 +314,7 @@ def evolution_panel(ax, data: list[dict], color: str, title: str, note: str, sho
     # The data tuning never read: only before and after, nudged clear of the training lines.
     for split, marker in (("test", "D"), ("heldOut", "^")):
         pts = [(i + (-0.14 if i == 0 else 0.14), d[split][0]) for i, d in enumerate(data) if split in d]
-        if len(pts) == 2:
+        if len(pts) >= 2:
             ax.plot([p[0] for p in pts], [p[1] for p in pts], linestyle=(0, (1, 2.5)), color=INK, linewidth=1.3, zorder=2)
         for x, v in pts:
             ax.scatter(x, v, s=60, marker=marker, color=INK, zorder=4)
@@ -336,16 +336,16 @@ def evolution_figure(rounds: dict, out: str) -> None:
     h = 7.4
     fig = setup_figure(13.5, h)
     jev, rules = rounds["jev"], rounds["rules"]
-    heading(fig, f"skill-factory's loop took jev from {jev[0]['val'][0]:.0f}% to {jev[-1]['val'][0]:.0f}% of malicious skills caught",
-            "Each round reads the training misses, rewrites, and keeps a change only if it beats validation. "
-            "Test and held-out skills are read once, at the end.", h)
+    heading(fig, f"skill-factory took the general-classifier from {jev[0]['val'][0]:.0f}% to {jev[-1]['val'][0]:.0f}%",
+            "Malicious skills caught, per release, on the same skills. Kept only if better on validation (bold); test and held-out read once per round.", h)
     left = fig.add_axes((0.06, 0.2, 0.47, 0.5))
-    evolution_panel(left, jev, JEV, "jev's questions",
-                    f"jev alone. False flags on validation: {jev[0]['val'][1]:.1f}% before, {jev[-1]['val'][1]:.1f}% after.", short=False)
+    notes = rounds.get("_notes", {})
+    jev_note = notes.get("jev", "general-classifier alone. False flags on validation: {before}% before, {after}% after.")
+    evolution_panel(left, jev, JEV, "the general-classifier's questions", jev_note.format(before=f"{jev[0]['val'][1]:.1f}", after=f"{jev[-1]['val'][1]:.1f}"), short=False)
     for d in rules:
         d.setdefault("short", {"Released rules": "Released", "Tuned": "Tuned"}.get(d["round"], d["round"].replace("Round ", "R")))
     right = fig.add_axes((0.665, 0.2, 0.21, 0.5))
-    evolution_panel(right, rules, OURS, "skill-scanner's rules", "Two rules kept, two dropped. False flags unchanged.", short=True)
+    evolution_panel(right, rules, OURS, "static analysis rules", notes.get("rules", "Two rules kept, two dropped. False flags unchanged."), short=True)
     legend = [("o", JEV, JEV, "training (read)"), ("s", PAPER, JEV, "validation (the gate)"),
               ("D", INK, INK, "test (read once)"), ("^", INK, INK, "held-out corpora (read once)")]
     for i, (m, fc, ec, label) in enumerate(legend):
