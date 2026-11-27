@@ -40,6 +40,33 @@ import type { AnalyzerInfo, ToolDriver } from "./types";
  * flag, so an engine that rejects it is run again without it.
  */
 
+/**
+ * Python 3.15 reports an unlimited resource limit as a huge positive number instead of -1, and
+ * semgrep (1.187.0 and earlier) derives its engine's stack limit from the stack hard limit: on
+ * Linux, where that is unlimited by default, semgrep-core gets a stack of about 6 EB and dies at
+ * startup ("the engine was killed", exit -11). https://github.com/semgrep/semgrep/issues/11979.
+ * Making the hard limit finite before semgrep starts avoids it. At 3,000,000 KB semgrep picks the
+ * same engine stack of about 1 GB that it picks on Python 3.14 with no limit.
+ */
+export const STACK_HARD_LIMIT_KB = 3_000_000;
+
+/** Caps an unlimited stack hard limit (both limits, if the soft one is unlimited too), then becomes the engine. */
+const STACK_LIMIT_SCRIPT =
+  `if [ "$(ulimit -H -s)" = unlimited ]; then { ulimit -H -s ${STACK_HARD_LIMIT_KB} || ulimit -s ${STACK_HARD_LIMIT_KB}; } 2>/dev/null; fi; ` +
+  'exec "$0" "$@"';
+
+/**
+ * The command that runs the engine. On Linux it goes through /bin/sh to set the stack limit; the
+ * engine and its arguments are passed as the shell's positional parameters, never into the script.
+ */
+export function semgrepCommand(
+  bin: string,
+  args: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): { readonly command: string; readonly args: readonly string[] } {
+  return platform === "linux" ? { command: "/bin/sh", args: ["-c", STACK_LIMIT_SCRIPT, bin, ...args] } : { command: bin, args };
+}
+
 export const DEFAULT_SEMGREP_CONFIG = "p/default";
 const IGNORE_FILES_FLAG = "--x-ignore-semgrepignore-files";
 const RULE_TIMEOUT_SECONDS = "30";
@@ -181,9 +208,13 @@ export const semgrepDriver: ToolDriver = {
   toolEnv: (env) => ({ ...env, NO_COLOR: "1", SEMGREP_SEND_METRICS: "off", SEMGREP_ENABLE_VERSION_CHECK: "0" }),
   network: (cfg) => isRegistryConfig(cfg.semgrepConfig?.trim() || DEFAULT_SEMGREP_CONFIG),
   create: (env, cfg) =>
-    toolAnalyzer(semgrepDriver, env, async ({ root, bin, exec }) => {
+    toolAnalyzer(semgrepDriver, env, async ({ root, bin, execCommand }) => {
       const engine = engineOf(bin);
       const config = resolveSemgrepConfig(cfg, env);
+      const exec = (args: readonly string[]) => {
+        const c = semgrepCommand(bin, args);
+        return execCommand(c.command, c.args);
+      };
       let result = await exec(semgrepArgs(engine, config, root, true));
       if (rejectedIgnoreFlag(result)) result = await exec(semgrepArgs(engine, config, root, false));
       checkSemgrepExit(engine, result);

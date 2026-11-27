@@ -226,6 +226,8 @@ export interface ToolRun {
   /** The executable being run. */
   readonly bin: string;
   exec(args: readonly string[], opts?: Pick<RunOptions, "timeoutMs" | "maxOutputBytes">): Promise<ToolResult>;
+  /** Run another command, such as a shell that sets a limit and then execs `bin`, with the same cwd, environment, and signal. */
+  execCommand(command: string, args: readonly string[], opts?: Pick<RunOptions, "timeoutMs" | "maxOutputBytes">): Promise<ToolResult>;
 }
 
 /**
@@ -248,13 +250,10 @@ export function toolAnalyzer(
       const real = await realpath(resolve(root));
       const workDir = await mkdtemp(join(tmpdir(), `skill-scanner-${driver.info.name}-`));
       const toolEnv = driver.toolEnv(env);
+      const execCommand: ToolRun["execCommand"] = (command, args, opts) =>
+        runTool(command, args, { cwd: workDir, env: toolEnv, ...(signal ? { signal } : {}), ...opts });
       try {
-        return await scan({
-          root: real,
-          workDir,
-          bin,
-          exec: (args, opts) => runTool(bin, args, { cwd: workDir, env: toolEnv, ...(signal ? { signal } : {}), ...opts }),
-        });
+        return await scan({ root: real, workDir, bin, exec: (args, opts) => execCommand(bin, args, opts), execCommand });
       } finally {
         await rm(workDir, { recursive: true, force: true });
       }
