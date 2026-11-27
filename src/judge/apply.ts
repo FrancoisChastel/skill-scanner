@@ -41,6 +41,46 @@ export function applyScores(bundle: SkillBundle, findings: readonly Finding[], s
   return score >= THREAT_AT ? [...reviewed, threatFinding(bundle, scores, score, model)] : reviewed;
 }
 
+/** One window's answers, and the files (or parts) it carried besides its opener. */
+export interface WindowScores {
+  readonly scores: ProbeScores;
+  readonly contents: readonly string[];
+}
+
+/**
+ * The answers about a skill sent in windows. Its threat score is the most threatening window's, so
+ * an attack is not diluted by the text around it. A finding is doubted only when every window was
+ * read and none gives its probe DOUBT_BELOW or more; when only the first windows were read, none is.
+ * One complete window is exactly applyScores.
+ */
+export function applyWindowScores(
+  bundle: SkillBundle,
+  findings: readonly Finding[],
+  windows: readonly WindowScores[],
+  complete: boolean,
+  model: string,
+): Finding[] {
+  const [only] = windows;
+  if (!only) return [...findings];
+  if (windows.length === 1 && complete) return applyScores(bundle, findings, only.scores, model);
+  const reviewed = complete ? findings.map((f) => review(f, highest(windows), model)) : [...findings];
+  const top = windows
+    .map((w, i) => ({ w, i, score: threatScore(w.scores) }))
+    .reduce((best, next) => (next.score > best.score ? next : best));
+  if (top.score < THREAT_AT) return reviewed;
+  const where = `in window ${top.i + 1} of ${windows.length} (${listed(top.w.contents)})`;
+  return [...reviewed, threatFinding(bundle, top.w.scores, top.score, model, where)];
+}
+
+/** Each probe's highest P(true) over the windows: what any of them saw. */
+function highest(windows: readonly WindowScores[]): ProbeScores {
+  const keys = Object.keys(windows[0]?.scores ?? {}) as (keyof ProbeScores)[];
+  return Object.fromEntries(keys.map((k) => [k, Math.max(...windows.map((w) => w.scores[k]))])) as ProbeScores;
+}
+
+const listed = (labels: readonly string[]): string =>
+  labels.length <= 3 ? labels.join(", ") : `${labels.slice(0, 3).join(", ")} and ${labels.length - 3} more`;
+
 function review(f: Finding, scores: ProbeScores, model: string): Finding {
   const probe = PROBE_FOR_CATEGORY[f.category];
   if (probe === undefined) return f;
@@ -54,7 +94,7 @@ function canDoubt(f: Finding): boolean {
   return f.severity !== "critical" && findRule(f.ruleId)?.hard !== true;
 }
 
-function threatFinding(bundle: SkillBundle, scores: ProbeScores, score: number, model: string): Finding {
+function threatFinding(bundle: SkillBundle, scores: ProbeScores, score: number, model: string, where?: string): Finding {
   // The answers that carried the score, strongest first, so a reader knows where to look.
   const reasons = THREAT_PROBES.filter((p) => scores[p.id] >= 0.1)
     .sort((a, b) => scores[b.id] - scores[a.id])
@@ -67,7 +107,7 @@ function threatFinding(bundle: SkillBundle, scores: ProbeScores, score: number, 
     severity: "medium",
     confidence: "medium",
     message:
-      `jev: threat score ${score.toFixed(2)}, at or above ${THREAT_AT}` +
+      `jev: threat score ${score.toFixed(2)}${where ? ` ${where}` : ""}, at or above ${THREAT_AT}` +
       `${reasons.length ? `; ${reasons.join("; ")}` : ""}. It is a model's opinion; no static rule needs to agree.`,
     location: { file: anchorFile(bundle) },
     bundle: bundle.name,

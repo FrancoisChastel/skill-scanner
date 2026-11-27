@@ -75,6 +75,23 @@ describe("existing findings", () => {
     ]);
   });
 
+  test("a planted-path directive is never doubted: jev's injection question does not speak to it", () => {
+    // Arrange
+    const planted = makeFinding({
+      ruleId: "deception/planted-path-directive",
+      category: "deception",
+      severity: "medium",
+      confidence: "medium",
+    });
+
+    // Act
+    const [out] = applyScores(bundle, [planted], scoresOf({ prompt_injection: 0.01 }), MODEL);
+
+    // Assert
+    expect(out?.confidence).toBe("medium");
+    expect(out?.judge?.effect).toBe("none");
+  });
+
   test("a critical finding is never doubted", () => {
     // Arrange
     const finding = makeFinding({ category: "destructive", ruleId: "destructive/test-soft", severity: "critical", confidence: "medium" });

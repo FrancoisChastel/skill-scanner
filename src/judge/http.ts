@@ -7,7 +7,7 @@
 /** Anything shaped like fetch. Structural so tests and hosts can inject a plain function. */
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
-export type JudgeErrorCode = "http" | "redirect" | "timeout" | "network" | "cancelled" | "invalid_response";
+export type JudgeErrorCode = "http" | "redirect" | "timeout" | "network" | "cancelled" | "invalid_response" | "too_long";
 
 export class JudgeError extends Error {
   override readonly name = "JudgeError";
@@ -77,7 +77,7 @@ async function attemptOnce(opts: PostOptions): Promise<unknown> {
       redirect: "manual",
       signal: ctrl.signal,
     });
-    checkStatus(res);
+    await checkStatus(res);
     return await readJson(res);
   } catch (e) {
     throw why(e);
@@ -87,8 +87,10 @@ async function attemptOnce(opts: PostOptions): Promise<unknown> {
   }
 }
 
-function checkStatus(res: Response): void {
+async function checkStatus(res: Response): Promise<void> {
   if (res.ok && res.type !== "opaqueredirect") return;
+  if ((res.status === 400 || res.status === 413) && (await overTokenLimit(res)))
+    throw new JudgeError("the text is over the model's token limit", "too_long", false, res.status);
   discard(res);
   if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400))
     throw new JudgeError(
@@ -108,6 +110,52 @@ async function readJson(res: Response): Promise<unknown> {
   } catch {
     throw new JudgeError("returned a response that is not JSON", "invalid_response", false, res.status);
   }
+}
+
+/** Error codes hosts use for a request over the model's context: TypeSafe's, and the OpenAI-style one gateways pass on. */
+const TOKEN_LIMIT_CODES: ReadonlySet<string> = new Set(["max_tokens_exceeded", "context_length_exceeded"]);
+const ERROR_BODY_MAX = 8 * 1024;
+
+/** Whether a refusal names the token limit. Only its error code is looked at, in the first 8 KB; the body is never echoed. */
+async function overTokenLimit(res: Response): Promise<boolean> {
+  const text = await readCapped(res, ERROR_BODY_MAX).catch(() => "");
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return false;
+  }
+  const codes = [pick(body, "detail", "error_type"), pick(body, "error", "code"), pick(body, "error", "type"), pick(body, "error_type")];
+  return codes.some((c) => typeof c === "string" && TOKEN_LIMIT_CODES.has(c));
+}
+
+function pick(value: unknown, ...keys: string[]): unknown {
+  let at = value;
+  for (const k of keys) at = typeof at === "object" && at !== null && !Array.isArray(at) ? (at as Record<string, unknown>)[k] : undefined;
+  return at;
+}
+
+/** At most `max` bytes of a body, then the rest is cancelled. */
+async function readCapped(res: Response, max: number): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (size < max) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    size += value.byteLength;
+  }
+  await reader.cancel().catch(() => undefined);
+  const bytes = new Uint8Array(Math.min(size, max));
+  let at = 0;
+  for (const c of chunks) {
+    const n = Math.min(c.byteLength, bytes.length - at);
+    bytes.set(c.subarray(0, n), at);
+    at += n;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 function statusHint(status: number): string {
