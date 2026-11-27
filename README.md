@@ -251,7 +251,7 @@ jobs:
       security-events: write   # to upload SARIF to code scanning
     steps:
       - uses: actions/checkout@v7
-      - uses: FrancoisChastel/skill-scanner@v0.5.0
+      - uses: FrancoisChastel/skill-scanner@v0.5.1
         env:
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}   # optional: the jev judge
         with:
